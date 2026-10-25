@@ -1,0 +1,49 @@
+[project]
+name = "orchmesh-server"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "alembic>=1.20.1",
+    "fastapi>=0.162.0",
+    "fastapi-cli>=0.0.32",
+    "fastapi-users[sqlalchemy]>=15.0.5",
+    "limits>=5.8.0",
+    "pydantic-settings>=2.16.1",
+    "sqlalchemy[asyncio]>=2.0.55",
+    "starlette-csrf>=3.0.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "httpx2>=2.16.0",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+orchmesh = "orchmesh.cli:main"
+
+[tool.fastapi]
+entrypoint = "orchmesh.main:app"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orchmesh"]

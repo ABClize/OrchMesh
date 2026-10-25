@@ -1,0 +1,131 @@
+{
+  "checked_date": "2026-10-26",
+  "python": "3.12.15",
+  "node": "24.21.0",
+  "backend": {
+    "aiosqlite": "0.22.1",
+    "alembic": "1.20.1",
+    "fastapi": "0.162.0",
+    "fastapi-cli": "0.0.32",
+    "fastapi-users": "15.0.5",
+    "limits": "5.8.0",
+    "pydantic-settings": "2.16.1",
+    "sqlalchemy": "2.0.55",
+    "starlette-csrf": "3.0.0",
+    "uvicorn": "0.54.0",
+    "httpx": "0.28.1",
+    "httpx2": "2.16.0",
+    "pyright": "1.1.414",
+    "pytest": "9.1.1",
+    "pytest-asyncio": "1.4.0",
+    "ruff": "0.17.2"
+  },
+  "frontend": {
+    "dependencies": {
+      "@assistant-ui/react": "0.15.31",
+      "@assistant-ui/react-markdown": "0.14.24",
+      "@tanstack/react-query": "5.104.5",
+      "openapi-fetch": "0.17.0",
+      "react": "19.3.1",
+      "react-dom": "19.3.1",
+      "zustand": "5.0.16"
+    },
+    "devDependencies": {
+      "@eslint/js": "10.0.1",
+      "@tailwindcss/vite": "4.3.3",
+      "@testing-library/jest-dom": "7.0.1",
+      "@testing-library/react": "16.3.3",
+      "@types/node": "24.19.2",
+      "@types/react": "19.3.0",
+      "@types/react-dom": "19.3.0",
+      "@vitejs/plugin-react": "6.1.2",
+      "assistant-ui": "0.0.126",
+      "eslint": "10.13.0",
+      "eslint-plugin-react-hooks": "7.1.1",
+      "jsdom": "30.1.3",
+      "openapi-typescript": "7.13.0",
+      "prettier": "3.9.10",
+      "shadcn": "4.22.1",
+      "skills": "1.7.4",
+      "tailwindcss": "4.3.3",
+      "typescript": "5.9.3",
+      "typescript-eslint": "8.72.0",
+      "vite": "8.3.5",
+      "vitest": "5.0.5"
+    }
+  },
+  "skills": {
+    "assistant-ui": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/assistant-ui/SKILL.md",
+      "computedHash": "865443c51b1c784123f923b0add5cbda88e46da641f72734a0af4d3e63ac95d9"
+    },
+    "elements": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/elements/SKILL.md",
+      "computedHash": "8b03415d5e0c5b7dd699987a274df323cad025987c989591f0e5d85daea25bd8"
+    },
+    "fastapi": {
+      "source": "fastapi/fastapi",
+      "sourceType": "github",
+      "skillPath": "fastapi/.agents/skills/fastapi/SKILL.md",
+      "computedHash": "2f0ff30756b435168276e1a7eb78c07856118575ea174535de7ed86dc88c9be4"
+    },
+    "markdown": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/markdown/SKILL.md",
+      "computedHash": "9d458ed1ae816985db02fb18e6a1a272b0b3b75ebcfcef7015ebff563665b0aa"
+    },
+    "primitives": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/primitives/SKILL.md",
+      "computedHash": "d9a92ff2c727a9ebd680c93baf06bbf3d435d04e67f0875b623b03015223033a"
+    },
+    "runtime": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/runtime/SKILL.md",
+      "computedHash": "797a4e18c3c1589e1f672e920fade1e1b9373d2277b535a526cc73b0b15a9819"
+    },
+    "setup": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/setup/SKILL.md",
+      "computedHash": "27d6b7aa5e3a8d89542ebd5ee56a27acfb25e4935ae134191171f4c170dfb3ec"
+    },
+    "shadcn": {
+      "source": "shadcn-ui/ui",
+      "sourceType": "github",
+      "skillPath": "skills/shadcn/SKILL.md",
+      "computedHash": "b864a958765563321f485a96f4d59c0bb6539f4286ab6d8b8b66895b7ebd302d"
+    },
+    "streaming": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/streaming/SKILL.md",
+      "computedHash": "0ca7aa05ca11416607e622b572c804aead597427845af083013dbfcfb0827ee2"
+    },
+    "thread-list": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/thread-list/SKILL.md",
+      "computedHash": "0ef9e81a9d69e61e58282f37b35536cf51c9d7e7c3f94adeeb423ebc5e8c3ce1"
+    },
+    "tools": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/tools/SKILL.md",
+      "computedHash": "ab2e53dc23691028d1b6a02a47e82f9608200f35ef4bf19493613bd449a71b3c"
+    },
+    "update": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "skillPath": "assistant-ui/skills/update/SKILL.md",
+      "computedHash": "01b3963e35bf9c33196a3c9d08f3afc6f3bf81bed56e6317d36f9d1ad1b1eb39"
+    }
+  }
+}
