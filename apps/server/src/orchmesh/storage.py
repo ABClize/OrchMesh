@@ -1,8 +1,6 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi_users.db import SQLAlchemyBaseUserTableUUID
-from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -14,12 +12,14 @@ class Base(DeclarativeBase):
     pass
 
 
-class User(SQLAlchemyBaseUserTableUUID, Base):
-    pass
-
-
-class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
-    pass
+class User(Base):
+    __tablename__ = "user"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(1024))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    is_superuser: Mapped[bool] = mapped_column(default=False)
+    is_verified: Mapped[bool] = mapped_column(default=False)
 
 
 class Conversation(Base):

@@ -1,5 +1,8 @@
 import { create } from "zustand";
-import type { ThreadMessageLike } from "@assistant-ui/react";
+import {
+  projectPiThreadMessages,
+  type PiAgentMessage,
+} from "@assistant-ui/react-pi";
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 type Part = {
@@ -70,7 +73,9 @@ export const useChat = create<State>((set) => ({
     }),
   event: (event) =>
     set((state) => {
-      const messages = structuredClone(state.messages);
+      const messages = state.messages.slice();
+      if (state.current !== null)
+        messages[state.current] = structuredClone(messages[state.current]);
       let current = state.current;
       if (event.type === "message_start" && event.message) {
         messages.push(event.message);
@@ -111,53 +116,18 @@ export const useChat = create<State>((set) => ({
     }),
 }));
 
-export function toThreadMessages(messages: PiMessage[]): ThreadMessageLike[] {
-  const results = new Map(
-    messages
-      .filter((m) => m.role === "toolResult")
-      .map((m) => [m.toolCallId, m]),
-  );
-  return messages.flatMap((message, index): ThreadMessageLike[] => {
-    if (message.role !== "user" && message.role !== "assistant") return [];
-    const parts =
-      typeof message.content === "string"
-        ? [{ type: "text", text: message.content }]
-        : message.content;
-    const content: Exclude<ThreadMessageLike["content"], string>[number][] = [];
-    for (const part of parts) {
-      if (part.type === "text")
-        content.push({ type: "text", text: part.text ?? "" });
-      if (part.type === "thinking")
-        content.push({ type: "reasoning", text: part.thinking ?? "" });
-      if (part.type === "toolCall" && part.id) {
-        const result = results.get(part.id);
-        content.push({
-          type: "tool-call",
-          toolCallId: part.id,
-          toolName: part.name ?? "tool",
-          args: part.arguments ?? {},
-          argsText: JSON.stringify(part.arguments ?? {}),
-          ...(result
-            ? { result: result.content, isError: result.isError }
-            : {}),
-        });
-      }
-    }
-    return [
-      {
-        id: `pi-${message.timestamp ?? 0}-${index}`,
-        role: message.role,
-        content,
-        ...(message.role === "assistant" && message.stopReason === "error"
-          ? {
-              status: {
-                type: "incomplete",
-                reason: "error",
-                error: "模型调用失败，请检查 Pi 配置。",
-              } as const,
-            }
-          : {}),
-      },
-    ];
+// Pi 1.4 RPC sends deltas, unlike the SDK events expected by the upstream
+// reducer. Keep that transport adapter above; delegate UI projection upstream.
+export function toThreadMessages(messages: PiMessage[], status = "idle") {
+  return projectPiThreadMessages({
+    messages: messages as PiAgentMessage[],
+    toolExecutions: {},
+    hostUiRequests: [],
+    runStatus:
+      status === "running"
+        ? "running"
+        : status === "failed"
+          ? "failed"
+          : "idle",
   });
 }

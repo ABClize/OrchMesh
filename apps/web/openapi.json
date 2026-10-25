@@ -5,18 +5,18 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/api/auth/login": {
+    "/api/login/access-token": {
       "post": {
         "tags": [
           "auth"
         ],
-        "summary": "Auth:Cookie.Login",
-        "operationId": "auth_cookie_login_api_auth_login_post",
+        "summary": "Login",
+        "operationId": "login_api_login_access_token_post",
         "requestBody": {
           "content": {
             "application/x-www-form-urlencoded": {
               "schema": {
-                "$ref": "#/components/schemas/Body_auth_cookie_login_api_auth_login_post"
+                "$ref": "#/components/schemas/Body_login_api_login_access_token_post"
               }
             }
           },
@@ -27,36 +27,11 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                },
-                "examples": {
-                  "LOGIN_BAD_CREDENTIALS": {
-                    "summary": "Bad credentials or the user is inactive.",
-                    "value": {
-                      "detail": "LOGIN_BAD_CREDENTIALS"
-                    }
-                  },
-                  "LOGIN_USER_NOT_VERIFIED": {
-                    "summary": "The user is not verified.",
-                    "value": {
-                      "detail": "LOGIN_USER_NOT_VERIFIED"
-                    }
-                  }
+                  "$ref": "#/components/schemas/Token"
                 }
               }
             }
-          },
-          "204": {
-            "description": "No Content"
           },
           "422": {
             "description": "Validation Error",
@@ -69,36 +44,6 @@
             }
           }
         }
-      }
-    },
-    "/api/auth/logout": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Auth:Cookie.Logout",
-        "operationId": "auth_cookie_logout_api_auth_logout_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Missing token or inactive user."
-          },
-          "204": {
-            "description": "No Content"
-          }
-        },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ]
       }
     },
     "/api/health": {
@@ -141,7 +86,7 @@
         },
         "security": [
           {
-            "APIKeyCookie": []
+            "OAuth2PasswordBearer": []
           }
         ]
       }
@@ -168,7 +113,7 @@
         },
         "security": [
           {
-            "APIKeyCookie": []
+            "OAuth2PasswordBearer": []
           }
         ]
       },
@@ -189,7 +134,7 @@
         },
         "security": [
           {
-            "APIKeyCookie": []
+            "OAuth2PasswordBearer": []
           }
         ]
       }
@@ -200,7 +145,7 @@
         "operationId": "snapshot_api_conversations__conversation_id__get",
         "security": [
           {
-            "APIKeyCookie": []
+            "OAuth2PasswordBearer": []
           }
         ],
         "parameters": [
@@ -245,7 +190,7 @@
         "operationId": "send_api_conversations__conversation_id__runs_post",
         "security": [
           {
-            "APIKeyCookie": []
+            "OAuth2PasswordBearer": []
           }
         ],
         "parameters": [
@@ -300,7 +245,7 @@
         "operationId": "stop_api_conversations__conversation_id__stop_post",
         "security": [
           {
-            "APIKeyCookie": []
+            "OAuth2PasswordBearer": []
           }
         ],
         "parameters": [
@@ -349,7 +294,7 @@
         "operationId": "events_api_conversations__conversation_id__events_get",
         "security": [
           {
-            "APIKeyCookie": []
+            "OAuth2PasswordBearer": []
           }
         ],
         "parameters": [
@@ -406,7 +351,7 @@
   },
   "components": {
     "schemas": {
-      "Body_auth_cookie_login_api_auth_login_post": {
+      "Body_login_api_login_access_token_post": {
         "properties": {
           "grant_type": {
             "anyOf": [
@@ -463,7 +408,7 @@
           "username",
           "password"
         ],
-        "title": "Body_auth_cookie_login_api_auth_login_post"
+        "title": "Body_login_api_login_access_token_post"
       },
       "ConversationRead": {
         "properties": {
@@ -488,29 +433,6 @@
           "created_at"
         ],
         "title": "ConversationRead"
-      },
-      "ErrorModel": {
-        "properties": {
-          "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
-              }
-            ],
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "required": [
-          "detail"
-        ],
-        "title": "ErrorModel"
       },
       "HTTPValidationError": {
         "properties": {
@@ -604,6 +526,24 @@
         ],
         "title": "Snapshot"
       },
+      "Token": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token"
+        ],
+        "title": "Token"
+      },
       "UserRead": {
         "properties": {
           "id": {
@@ -613,29 +553,28 @@
           },
           "email": {
             "type": "string",
-            "format": "email",
             "title": "Email"
           },
           "is_active": {
             "type": "boolean",
-            "title": "Is Active",
-            "default": true
+            "title": "Is Active"
           },
           "is_superuser": {
             "type": "boolean",
-            "title": "Is Superuser",
-            "default": false
+            "title": "Is Superuser"
           },
           "is_verified": {
             "type": "boolean",
-            "title": "Is Verified",
-            "default": false
+            "title": "Is Verified"
           }
         },
         "type": "object",
         "required": [
           "id",
-          "email"
+          "email",
+          "is_active",
+          "is_superuser",
+          "is_verified"
         ],
         "title": "UserRead"
       },
@@ -681,10 +620,14 @@
       }
     },
     "securitySchemes": {
-      "APIKeyCookie": {
-        "type": "apiKey",
-        "in": "cookie",
-        "name": "orchmesh_session"
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "/api/login/access-token"
+          }
+        }
       }
     }
   }

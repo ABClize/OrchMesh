@@ -1,5 +1,6 @@
 import asyncio
 import fcntl
+import time
 import uuid
 from collections.abc import AsyncIterable
 from contextlib import asynccontextmanager
@@ -10,10 +11,12 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette_csrf.middleware import CSRFMiddleware
 
-from .auth import COOKIE, Auth, UserRead
+from .accounts import UserRead
+from .auth import Auth, bearer
+from .bootstrap import bootstrap
 from .config import Settings
+from .logging import application_logging, failure, logger
 from .pi.manager import Busy, Manager
 from .storage import Conversation, Database, Run, User
 
@@ -43,7 +46,7 @@ class Snapshot(BaseModel):
 
 def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
     settings = settings or Settings()
-    secret = settings.secret()
+    settings.secret()
     db = Database(settings)
     auth = Auth(db, settings)
     manager = Manager(db, settings, containers)
@@ -52,29 +55,40 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
     async def lifespan(app):
         with (settings.data_dir / "runtime.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            try:
-                await manager.recover()
-                yield
-            finally:
-                await manager.close()
-                await db.engine.dispose()
+            with application_logging(settings):
+                try:
+                    await manager.recover()
+                    await bootstrap(db, settings)
+                    yield
+                finally:
+                    await manager.close()
+                    await db.engine.dispose()
 
     app = FastAPI(title="OrchMesh", lifespan=lifespan, openapi_url="/api/openapi.json")
     app.state.db, app.state.manager, app.state.auth = db, manager, auth
-    app.add_middleware(
-        CSRFMiddleware,
-        secret=secret,
-        cookie_name="orchmesh_csrf",
-        header_name="x-csrftoken",
-        cookie_secure=settings.cookie_secure,
-        cookie_samesite="strict",
-    )
-    app.include_router(
-        auth.users.get_auth_router(auth.backend),
-        prefix="/api/auth",
-        tags=["auth"],
-        dependencies=[Depends(auth.login_limit)],
-    )
+    app.include_router(auth.router)
+
+    @app.middleware("http")
+    async def request_log(request: Request, call_next):
+        started = time.monotonic()
+        request_id = uuid.uuid4().hex
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            failure("http.failure", exc, request_id=request_id)
+            raise
+        # Route templates exclude query strings, credentials and user-supplied paths.
+        route = getattr(request.scope.get("route"), "path", "unmatched")
+        logger.info(
+            "http.response request_id=%s method=%s route=%s status=%s headers_ms=%.1f",
+            request_id,
+            request.method,
+            route,
+            response.status_code,
+            (time.monotonic() - started) * 1000,
+        )
+        response.headers["X-Request-ID"] = request_id
+        return response
 
     async def owned(conversation_id: uuid.UUID, user: User, session: AsyncSession):
         conversation = await session.scalar(
@@ -129,7 +143,8 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
             result = await manager.history(user.id, conversation_id)
         except Busy as exc:
             raise HTTPException(409, str(exc)) from exc
-        except (RuntimeError, TimeoutError):
+        except (RuntimeError, TimeoutError) as exc:
+            failure("history.failure", exc, conversation_id=conversation_id)
             raise HTTPException(503, "Pi 历史读取失败，请检查执行镜像和用户配置")
         if result["status"] == "idle":
             last = await session.scalar(
@@ -192,6 +207,7 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
     async def events(
         conversation_id: uuid.UUID,
         request: Request,
+        token: Annotated[str, Depends(bearer)],
         user: Annotated[User, Depends(auth.current_user)],
         session: Annotated[AsyncSession, Depends(db.session)],
     ) -> AsyncIterable[ServerSentEvent]:
@@ -211,7 +227,7 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
             event="update", data={"type": "snapshot", **run.snapshot()}, id=str(cursor)
         )
         while True:
-            if not await auth.valid_session(request.cookies.get(COOKIE)):
+            if not await auth.valid_token(token):
                 yield ServerSentEvent(event="unauthorized", data={})
                 return
             if await request.is_disconnected():

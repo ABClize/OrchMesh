@@ -5,11 +5,20 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
+from ..logging import failure, logger
+
 
 class RPC:
     """One Pi process. The reader never waits for an HTTP subscriber."""
 
-    def __init__(self, command: list[str], on_event: Callable[[dict], None]):
+    def __init__(
+        self,
+        command: list[str],
+        on_event: Callable[[dict], None],
+        *,
+        context_id: str = "unknown",
+    ):
+        self.context_id = context_id
         self.command = command
         self.on_event = on_event
         self.pending: dict[str, asyncio.Future] = {}
@@ -17,6 +26,7 @@ class RPC:
         self.tasks: list[asyncio.Task] = []
         self.closed = asyncio.Event()
         self.error: Exception | None = None
+        self.stderr_bytes = 0
 
     async def start(self):
         self.process = await asyncio.create_subprocess_exec(
@@ -34,8 +44,8 @@ class RPC:
     async def _drain_stderr(self):
         assert self.process and self.process.stderr
         # Drain but never log provider diagnostics that could contain credentials.
-        while await self.process.stderr.read(65536):
-            pass
+        while chunk := await self.process.stderr.read(65536):
+            self.stderr_bytes += len(chunk)
 
     async def _read(self):
         assert self.process and self.process.stdout
@@ -53,6 +63,7 @@ class RPC:
                     self.on_event(record)
         except Exception as exc:
             self.error = exc
+            failure("rpc.read_failure", exc, context_id=self.context_id)
         finally:
             self.closed.set()
             for future in self.pending.values():
@@ -85,6 +96,13 @@ class RPC:
                 with contextlib.suppress(ProcessLookupError):
                     self.process.kill()
                 await self.process.wait()
+        if self.process:
+            logger.info(
+                "rpc.exit context_id=%s returncode=%s stderr_bytes=%s",
+                self.context_id,
+                self.process.returncode,
+                self.stderr_bytes,
+            )
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)

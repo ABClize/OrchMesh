@@ -1,40 +1,36 @@
 import createClient from "openapi-fetch";
 import type { paths } from "./api-schema";
+import { expireToken, getToken, setToken } from "./session";
 
-export const api = createClient<paths>({ baseUrl: "" });
+export const api = createClient<paths>({ baseUrl: "", credentials: "omit" });
 api.use({
-  async onRequest({ request }) {
-    if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
-      const token = document.cookie
-        .split("; ")
-        .find((s) => s.startsWith("orchmesh_csrf="))
-        ?.split("=")
-        .slice(1)
-        .join("=");
-      if (token) request.headers.set("x-csrftoken", decodeURIComponent(token));
-    }
+  onRequest({ request }) {
+    const token = getToken();
+    if (token) request.headers.set("Authorization", `Bearer ${token}`);
     return request;
+  },
+  onResponse({ request, response }) {
+    if (response.status === 401)
+      expireToken(request.headers.get("Authorization")?.slice(7) ?? null);
+    return response;
   },
 });
 
 export async function login(email: string, password: string) {
-  await api.GET("/api/health");
-  const token = document.cookie
-    .split("; ")
-    .find((s) => s.startsWith("orchmesh_csrf="))
-    ?.slice("orchmesh_csrf=".length);
-  const response = await fetch("/api/auth/login", {
+  const response = await fetch("/api/login/access-token", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "x-csrftoken": decodeURIComponent(token ?? ""),
-    },
+    credentials: "omit",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ username: email, password }),
   });
   if (!response.ok)
     throw new Error(
       response.status === 429
         ? "尝试过于频繁，请稍后再试。"
-        : "登录失败，请检查邮箱和密码。",
+        : response.status >= 500
+          ? "登录服务暂时不可用，请稍后再试。"
+          : "登录失败，请检查邮箱和密码。",
     );
+  const value: { access_token: string } = await response.json();
+  setToken(value.access_token);
 }

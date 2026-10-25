@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { api } from "@/lib/api";
+import { connectEvents } from "@/lib/events";
 import { toThreadMessages, useChat, type Snapshot } from "./store";
 
 function Welcome() {
@@ -29,58 +30,54 @@ export function Chat({
   onUnauthorized: () => void;
 }) {
   const state = useChat();
+  const mounted = useRef(true);
   const query = useQueryClient();
-  const source = useRef<EventSource | null>(null);
+  const source = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState(false);
   const messages = useMemo(
-    () => toThreadMessages(state.messages),
-    [state.messages],
+    () => toThreadMessages(state.messages, state.status),
+    [state.messages, state.status],
   );
 
   function subscribe() {
-    source.current?.close();
-    const stream = new EventSource(`/api/conversations/${id}/events`);
-    source.current = stream;
-    stream.addEventListener("update", (event: MessageEvent) => {
-      setConnectionError(false);
-      const value = JSON.parse(event.data);
-      if (value.type === "snapshot") {
-        useChat.getState().snapshot(value);
-        if (value.status !== "running") {
-          stream.close();
-          void query.invalidateQueries({ queryKey: ["conversations"] });
-        }
-      } else if (value.type === "pi") useChat.getState().event(value.event);
+    if (!mounted.current) return;
+    source.current?.abort();
+    source.current = connectEvents(`/api/conversations/${id}/events`, {
+      update(data) {
+        setConnectionError(false);
+        const value = JSON.parse(data);
+        if (value.type === "snapshot") {
+          useChat.getState().snapshot(value);
+          if (value.status !== "running") {
+            void query.invalidateQueries({ queryKey: ["conversations"] });
+            return true;
+          }
+        } else if (value.type === "pi") useChat.getState().event(value.event);
+        return false;
+      },
+      disconnected: () => setConnectionError(true),
+      failed: (message) => {
+        setConnectionError(false);
+        useChat.setState({ error: message });
+      },
+      unauthorized: onUnauthorized,
     });
-    stream.addEventListener("unauthorized", () => {
-      stream.close();
-      onUnauthorized();
-    });
-    stream.onerror = () => {
-      setConnectionError(true);
-      // EventSource reconnects; check auth because a rejected handshake has no SSE body.
-      void api.GET("/api/me").then(({ response }) => {
-        if (response.status === 401) {
-          stream.close();
-          onUnauthorized();
-        }
-      });
-    };
   }
 
   useEffect(() => {
     let alive = true;
+    mounted.current = true;
     useChat.getState().reset();
     setLoading(true);
     void query
       .fetchQuery({
         queryKey: ["snapshot", id],
         staleTime: 0,
-        queryFn: async () => {
+        queryFn: async ({ signal }) => {
           const { data, error } = await api.GET(
             "/api/conversations/{conversation_id}",
-            { params: { path: { conversation_id: id } } },
+            { params: { path: { conversation_id: id } }, signal },
           );
           if (error) throw new Error("读取对话失败，请稍后重试。");
           return data as Snapshot;
@@ -99,7 +96,8 @@ export function Chat({
       });
     return () => {
       alive = false;
-      source.current?.close();
+      mounted.current = false;
+      source.current?.abort();
       useChat.getState().reset();
     };
     // Chat is keyed by conversation, keeping subscription ownership local.
@@ -125,6 +123,7 @@ export function Chat({
             body: { text },
           },
         );
+        if (!mounted.current) return;
         if (error)
           throw new Error(
             response.status === 409
@@ -134,6 +133,7 @@ export function Chat({
         subscribe();
         void query.invalidateQueries({ queryKey: ["conversations"] });
       } catch (error) {
+        if (!mounted.current) return;
         useChat.setState({ status: "failed", error: (error as Error).message });
       }
     },
@@ -142,7 +142,8 @@ export function Chat({
         "/api/conversations/{conversation_id}/stop",
         { params: { path: { conversation_id: id } } },
       );
-      if (error) useChat.setState({ error: "停止请求失败，请重试。" });
+      if (error && mounted.current)
+        useChat.setState({ error: "停止请求失败，请重试。" });
     },
   });
   return (

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import update
 
 from ..config import Settings
+from ..logging import failure, logger
 from ..storage import Database, Run
 from .containers import Containers
 from .events import Messages
@@ -110,16 +111,28 @@ class Manager:
     async def _execute(self, run: Execution, prompt: str):
         rpc = None
         waiters = []
+        stage = "start"
+        logger.info(
+            "run.start run_id=%s user_id=%s conversation_id=%s",
+            run.id,
+            run.user_id,
+            run.conversation_id,
+        )
         try:
             rpc = RPC(
-                self.containers.command(run.user_id, run.conversation_id), run.accept
+                self.containers.command(run.user_id, run.conversation_id),
+                run.accept,
+                context_id=str(run.id),
             )
             run.rpc = rpc
             await rpc.start()
+            stage = "history"
             history = await rpc.call("get_messages")
             run.projection = Messages(history.get("messages", []))
             run.emit({"type": "snapshot", **run.snapshot()})
+            stage = "prompt"
             response = await rpc.call("prompt", message=prompt)
+            stage = "generation"
             run.ready.set()
             if response.get("disposition") != "handled":
                 waiters = [
@@ -135,6 +148,7 @@ class Manager:
                     raise TimeoutError
                 if not run.settled.is_set():
                     raise RuntimeError("Pi exited before settling")
+            stage = "history"
             history = await rpc.call("get_messages")
             run.projection = Messages(history.get("messages", []))
             failed = any(
@@ -147,7 +161,8 @@ class Manager:
                 run.error = "模型调用失败，请检查该用户的 Pi 模型配置与凭据。"
         except asyncio.CancelledError:
             run.status = "stopped" if run.stopping else "interrupted"
-        except Exception:
+        except Exception as exc:
+            failure("run.failure", exc, run_id=run.id, stage=stage)
             run.status = "stopped" if run.stopping else "failed"
             run.error = (
                 None
@@ -163,7 +178,8 @@ class Manager:
             cleanup_ok = True
             try:
                 await self.containers.kill(run.user_id)
-            except Exception:
+            except Exception as exc:
+                failure("run.cleanup_failure", exc, run_id=run.id)
                 cleanup_ok = False
                 run.status = "interrupted"
                 run.error = (
@@ -180,6 +196,12 @@ class Manager:
                         .values(status=run.status if cleanup_ok else "running")
                     )
                     await session.commit()
+                logger.info(
+                    "run.end run_id=%s status=%s cleanup_ok=%s",
+                    run.id,
+                    run.status,
+                    cleanup_ok,
+                )
                 run.finished = True
                 run.emit({"type": "snapshot", **run.snapshot()})
                 if cleanup_ok:
@@ -220,7 +242,11 @@ class Manager:
                 "error": None,
             }
         self.reading.add(user_id)
-        rpc = RPC(self.containers.command(user_id, conversation_id), lambda _: None)
+        rpc = RPC(
+            self.containers.command(user_id, conversation_id),
+            lambda _: None,
+            context_id=str(conversation_id),
+        )
         try:
             await rpc.start()
             data = await rpc.call("get_messages")

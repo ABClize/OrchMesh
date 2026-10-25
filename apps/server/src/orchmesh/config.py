@@ -1,5 +1,7 @@
 from pathlib import Path
+from typing import Literal
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -7,10 +9,24 @@ ROOT = Path(__file__).resolve().parents[4]
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="ORCHMESH_", env_file=ROOT / ".env", extra="ignore"
+        env_prefix="ORCHMESH_",
+        env_file=ROOT / ".env",
+        extra="ignore",
+        hide_input_in_errors=True,
     )
     data_dir: Path = ROOT / ".data"
-    cookie_secure: bool = False
+    host: str = "127.0.0.1"
+    port: int = Field(default=8000, ge=1, le=65535)
+    web_port: int = Field(default=5173, ge=1, le=65535)
+    bootstrap_admin_email: str = ""
+    bootstrap_admin_password: SecretStr = SecretStr("")
+    model_base_url: str = ""
+    model_api: str = "openai-completions"
+    model_api_key: SecretStr = SecretStr("")
+    model_id: str = ""
+    access_token_expire_minutes: int = Field(default=60, ge=1)
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    log_retention_days: int = Field(default=30, ge=1)
     pi_image: str = "orchmesh-pi:1.4.0"
     max_active_runs: int = 4
     run_timeout: int = 1800
@@ -21,9 +37,9 @@ class Settings(BaseSettings):
         return f"sqlite+aiosqlite:///{self.data_dir}/platform.sqlite3"
 
     def secret(self) -> str:
-        # Generated once locally; never ship a default session/CSRF secret.
+        # Generated once locally; never ship a default JWT signing secret.
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path = self.data_dir / "csrf-secret"
+        path = self.data_dir / "jwt-secret"
         try:
             with path.open("x") as stream:
                 path.chmod(0o600)

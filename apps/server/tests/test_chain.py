@@ -7,17 +7,17 @@ import pytest
 from conftest import authenticated, settle
 
 
-async def test_csrf_auth_ownership_revocation(app):
+async def test_bearer_auth_and_ownership(app):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as anonymous:
         assert (await anonymous.get("/api/me")).status_code == 401
         assert (
             await anonymous.post(
-                "/api/auth/login",
+                "/api/login/access-token",
                 data={"username": "one@example.com", "password": "bad"},
             )
-        ).status_code == 403
+        ).status_code == 400
     one = await authenticated(app)
     two = await authenticated(app, "two@example.com")
     async with aclosing(one), aclosing(two):
@@ -34,11 +34,12 @@ async def test_csrf_auth_ownership_revocation(app):
                 method, f"/api/conversations/{cid}{suffix}", json=body
             )
             assert response.status_code == 404, response.text
-        token = one.cookies["orchmesh_session"]
-        assert await app.state.auth.valid_session(token)
-        assert (await one.post("/api/auth/logout")).status_code == 204
-        assert not await app.state.auth.valid_session(token)
+        token = one.headers["Authorization"][7:]
+        assert await app.state.auth.valid_token(token)
+        del one.headers["Authorization"]
         assert (await one.get("/api/me")).status_code == 401
+        # Template logout is client-side; existing JWTs remain valid until expiry.
+        assert await app.state.auth.valid_token(token)
 
 
 async def test_stream_stop_and_resume_history(app):
@@ -93,7 +94,7 @@ async def test_exit_and_handled_release_capacity(app, prompt, status):
         await settle(app)
 
 
-async def test_logout_revokes_live_stream(app):
+async def test_deactivation_closes_live_stream(app):
     client = await authenticated(app)
     async with aclosing(client):
         cid = (await client.post("/api/conversations")).json()["id"]
@@ -101,10 +102,20 @@ async def test_logout_revokes_live_stream(app):
         await client.post(url + "/runs", json={"text": "slow"})
         stream = asyncio.create_task(client.get(url + "/events"))
         await asyncio.sleep(0.25)
-        await client.post("/api/auth/logout")
+        from sqlalchemy import update
+
+        from orchmesh.storage import User
+
+        async with app.state.db.sessions() as session:
+            await session.execute(
+                update(User)
+                .where(User.email == "one@example.com")
+                .values(is_active=False)
+            )
+            await session.commit()
         response = await asyncio.wait_for(stream, 3)
         assert "event: unauthorized" in response.text
-        # Logging out detaches the UI, never silently aborts work.
+        # Revoking account access detaches the stream, never silently aborts work.
         assert app.state.manager.active
 
 
@@ -116,7 +127,7 @@ async def test_login_rate_limit(app):
             statuses.append(
                 (
                     await client.post(
-                        "/api/auth/login",
+                        "/api/login/access-token",
                         data={"username": "missing@example.com", "password": "bad"},
                     )
                 ).status_code
@@ -207,3 +218,34 @@ async def test_static_frontend_and_unknown_api(app):
         response = await client.get("/")
         assert response.status_code == 200
         assert "<title>OrchMesh</title>" in response.text
+
+
+async def test_old_cookies_do_not_authenticate_or_block_login(app):
+    from conftest import PASSWORD
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        client.cookies.set("orchmesh_csrf", "old")
+        client.cookies.set("orchmesh_session", "old")
+        assert (await client.get("/api/me")).status_code == 401
+        assert (await client.post("/api/conversations")).status_code == 401
+        result = await client.post(
+            "/api/login/access-token",
+            data={"username": "one@example.com", "password": PASSWORD},
+        )
+        assert result.status_code == 200
+        assert "set-cookie" not in result.headers
+        assert result.headers["cache-control"] == "no-store"
+        assert (await client.post("/api/auth/login")).status_code == 404
+        assert (await client.post("/api/auth/logout")).status_code == 404
+
+
+async def test_same_account_independent_tokens(app):
+    one, two = await authenticated(app), await authenticated(app)
+    async with aclosing(one), aclosing(two):
+        assert (await one.get("/api/me")).status_code == 200
+        assert (await two.get("/api/me")).status_code == 200
+        del one.headers["Authorization"]
+        assert (await one.get("/api/me")).status_code == 401
+        assert (await two.get("/api/me")).status_code == 200

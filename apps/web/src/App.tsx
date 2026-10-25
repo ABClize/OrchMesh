@@ -1,12 +1,14 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import {
   QueryClient,
   QueryClientProvider,
   useQuery,
+  useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
 import { LogOut, Plus, MessageSquare } from "lucide-react";
-import { api, login } from "@/lib/api";
+import { api } from "@/lib/api";
+import { setToken, watchSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +25,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 const Chat = lazy(() =>
   import("@/features/chat/Chat").then((m) => ({ default: m.Chat })),
 );
+import { useAuth } from "@/features/auth/useAuth";
 import { useChat } from "@/features/chat/store";
 
 const queryClient = new QueryClient({
@@ -33,44 +36,61 @@ function Workspace() {
   const query = useQueryClient();
   const [id, setId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const running = useChat((s) => s.status === "running");
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: async () => {
-      const { data } = await api.GET("/api/me");
-      return data ?? null;
-    },
-  });
+  const { me, signIn } = useAuth();
   const conversations = useQuery({
     queryKey: ["conversations"],
     enabled: !!me.data,
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/conversations");
+    queryFn: async ({ signal }) => {
+      const { data, error } = await api.GET("/api/conversations", { signal });
       if (error) throw new Error("加载对话列表失败");
       return data ?? [];
     },
   });
+  useEffect(
+    () =>
+      watchSession(() => {
+        setId(null);
+        useChat.getState().reset();
+        query.clear();
+        void query.invalidateQueries({ queryKey: ["me"] });
+      }),
+    [query],
+  );
   function clearSession() {
+    setToken(null);
     setId(null);
     useChat.getState().reset();
     query.clear();
     query.setQueryData(["me"], null);
   }
-  async function newChat() {
-    setBusy(true);
-    setError("");
-    try {
+  const createChat = useMutation({
+    mutationFn: async () => {
       const { data, error } = await api.POST("/api/conversations");
       if (error || !data) throw new Error("创建对话失败");
+      return data;
+    },
+    onSuccess: async (data) => {
       setId(data.id);
       await query.invalidateQueries({ queryKey: ["conversations"] });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+    },
+  });
+  const busy = signIn.isPending || createChat.isPending;
+  const newChat = () => {
+    setError("");
+    createChat.mutate();
+  };
+  if (me.isError)
+    return (
+      <main className="grid min-h-dvh place-items-center">
+        <Alert className="max-w-md" variant="destructive">
+          <AlertDescription>
+            无法连接服务，请检查服务状态后重试。
+          </AlertDescription>
+          <Button onClick={() => void me.refetch()}>重试</Button>
+        </Alert>
+      </main>
+    );
   if (me.isLoading)
     return (
       <main className="grid min-h-dvh place-items-center">
@@ -90,22 +110,13 @@ function Workspace() {
           <CardContent>
             <form
               id="login"
-              onSubmit={async (e) => {
+              onSubmit={(e) => {
                 e.preventDefault();
-                setBusy(true);
-                setError("");
                 const form = new FormData(e.currentTarget);
-                try {
-                  await login(
-                    String(form.get("email")),
-                    String(form.get("password")),
-                  );
-                  await query.invalidateQueries({ queryKey: ["me"] });
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
+                signIn.mutate({
+                  email: String(form.get("email")),
+                  password: String(form.get("password")),
+                });
               }}
             >
               <FieldGroup>
@@ -129,9 +140,9 @@ function Workspace() {
                     required
                   />
                 </Field>
-                {error && (
+                {signIn.error && (
                   <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
+                    <AlertDescription>{signIn.error.message}</AlertDescription>
                   </Alert>
                 )}
               </FieldGroup>
@@ -160,14 +171,7 @@ function Workspace() {
           <span className="font-semibold tracking-tight">OrchMesh</span>
           <span className="text-xs text-muted-foreground">Pi 工作空间</span>
         </div>
-        <Button
-          variant="ghost"
-          onClick={async () => {
-            const { error } = await api.POST("/api/auth/logout");
-            if (!error) clearSession();
-            else setError("退出失败，请重试。");
-          }}
-        >
+        <Button variant="ghost" onClick={clearSession}>
           <LogOut data-icon="inline-start" />
           退出
         </Button>
@@ -207,10 +211,12 @@ function Workspace() {
           </span>
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
-          {(error || conversations.error) && (
+          {(error || createChat.error || conversations.error) && (
             <Alert variant="destructive">
               <AlertDescription>
-                {error || conversations.error?.message}
+                {error ||
+                  createChat.error?.message ||
+                  conversations.error?.message}
               </AlertDescription>
             </Alert>
           )}

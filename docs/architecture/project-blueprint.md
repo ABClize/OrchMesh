@@ -85,7 +85,7 @@ OrchMesh/
 | 数据 | SQLite + SQLAlchemy 2.x async + aiosqlite + Alembic | 用户、登录会话、聊天索引、执行摘要；短事务，不保存第二份消息历史 |
 | 认证 | FastAPI Users + SQLAlchemy 适配器 | CookieTransport + DatabaseStrategy；维护模式下的窄范围采用，须通过兼容测试 |
 | 密码 | pwdlib / Argon2 | 复用认证库密码管理，不自编密码算法 |
-| CSRF | starlette-csrf（有条件采用） | signed double-submit；低发布频率，须验证当前框架兼容性 |
+| 认证 | OAuth2 Bearer JWT | PyJWT + pwdlib；API 与 SSE 通过请求头认证 |
 | 请求限流 | limits async MemoryStorage | 登录/写接口限流；单实例内存计数，不替代执行并发限制 |
 | 前端 | React + TypeScript + Vite | 客户端交互、开发热更新、静态构建 |
 | UI | Tailwind CSS + shadcn/ui | 现成基础组件，按需引入源码 |
@@ -111,7 +111,7 @@ shadcn/ui 提供 Vite 安装路径。[官方文档](https://ui.shadcn.com/docs/i
 
 ## 四、暂不锁定或引入的依赖
 
-- 认证选型：FastAPI Users 的 CookieTransport + DatabaseStrategy + SQLAlchemy 适配器，管理员通过 UserManager 建账号，仅开放必要登录/退出/当前用户接口。它处于维护模式，不再增加功能，作为首版边界清晰的依赖采用；不是活跃扩展的企业 IAM。starlette-csrf 低发布频率，作为须通过兼容与安全行为测试的 CSRF 候选，未通过前不开放 Cookie 写接口。详见认证调研。
+- 当前认证选型：遵循 FastAPI 官方全栈模板的 Bearer JWT + pwdlib，移除 Cookie/CSRF 和数据库会话。账号及 Pi 数据保留，迁移细节与令牌生命周期以 README 为准。
 - 聊天选 assistant-ui 的 ExternalStoreRuntime，复用 Thread/Composer/ToolFallback/MarkdownText；Pi 是唯一工具执行方。未实现编辑、重新生成、分支和审批的服务端语义时不启用这些 UI 回调。Streamdown 仅作为实际渲染验证不达标时的替代，不同时维护两套。
 - 状态归属：Query 保存服务器快照；Zustand 根据历史快照和事件构建唯一的当前聊天活动视图；assistant-ui 只消费它。Query 不逐 token 更新，不新增独立聊天持久化。按 conversation/run ID 和稳定 message/toolCall ID 对齐，忽略过期事件；登出时清空缓存，不自动 persist 消息/凭据到 localStorage。局部状态仍用 React state。
 - 不引入 Next.js、SSR、独立前端服务、Nginx、Redis、Taskiq、通用 Runtime 框架或 MCP 自研客户端。

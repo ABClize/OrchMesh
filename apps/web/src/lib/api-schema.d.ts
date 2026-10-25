@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-  "/api/auth/login": {
+  "/api/login/access-token": {
     parameters: {
       query?: never;
       header?: never;
@@ -13,25 +13,8 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Auth:Cookie.Login */
-    post: operations["auth_cookie_login_api_auth_login_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/logout": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Auth:Cookie.Logout */
-    post: operations["auth_cookie_logout_api_auth_logout_post"];
+    /** Login */
+    post: operations["login_api_login_access_token_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -162,8 +145,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
-    /** Body_auth_cookie_login_api_auth_login_post */
-    Body_auth_cookie_login_api_auth_login_post: {
+    /** Body_login_api_login_access_token_post */
+    Body_login_api_login_access_token_post: {
       /** Grant Type */
       grant_type?: string | null;
       /** Username */
@@ -198,15 +181,6 @@ export interface components {
       /** Created At */
       created_at: string;
     };
-    /** ErrorModel */
-    ErrorModel: {
-      /** Detail */
-      detail:
-        | string
-        | {
-            [key: string]: string;
-          };
-    };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
@@ -240,6 +214,16 @@ export interface components {
       /** Error */
       error?: string | null;
     };
+    /** Token */
+    Token: {
+      /** Access Token */
+      access_token: string;
+      /**
+       * Token Type
+       * @default bearer
+       */
+      token_type: string;
+    };
     /** UserRead */
     UserRead: {
       /**
@@ -247,25 +231,13 @@ export interface components {
        * Format: uuid
        */
       id: string;
-      /**
-       * Email
-       * Format: email
-       */
+      /** Email */
       email: string;
-      /**
-       * Is Active
-       * @default true
-       */
+      /** Is Active */
       is_active: boolean;
-      /**
-       * Is Superuser
-       * @default false
-       */
+      /** Is Superuser */
       is_superuser: boolean;
-      /**
-       * Is Verified
-       * @default false
-       */
+      /** Is Verified */
       is_verified: boolean;
     };
     /** ValidationError */
@@ -290,7 +262,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  auth_cookie_login_api_auth_login_post: {
+  login_api_login_access_token_post: {
     parameters: {
       query?: never;
       header?: never;
@@ -299,7 +271,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/x-www-form-urlencoded": components["schemas"]["Body_auth_cookie_login_api_auth_login_post"];
+        "application/x-www-form-urlencoded": components["schemas"]["Body_login_api_login_access_token_post"];
       };
     };
     responses: {
@@ -309,23 +281,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description No Content */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorModel"];
+          "application/json": components["schemas"]["Token"];
         };
       };
       /** @description Validation Error */
@@ -336,40 +292,6 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
         };
-      };
-    };
-  };
-  auth_cookie_logout_api_auth_logout_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description No Content */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Missing token or inactive user. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
       };
     };
   };

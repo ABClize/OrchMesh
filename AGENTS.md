@@ -31,11 +31,11 @@ Account creation and dedicated Pi login commands are documented in `README.md`.
 
 Use typed Python, four-space indentation, and snake_case; use two-space TypeScript and PascalCase React components. Run Ruff, Pyright, ESLint, and Prettier using installed project tools.
 
-Run `uv run --directory apps/server pytest -q`, frontend `npm --prefix apps/web test -- src/features/chat/store.test.ts`, then use Codex’s built-in browser for UI acceptance following `docs/development/browser-acceptance.md`. Name Python tests `test_*.py` and frontend tests `*.test.ts`. There is no numeric coverage threshold; cover ownership, CSRF, cancellation, reconnect, failure, and cleanup behavior. Report simulated-model tests separately from external-model acceptance.
+Run `uv run --directory apps/server pytest -q`, frontend `npm --prefix apps/web test -- src/features/chat/store.test.ts`, then use Codex’s built-in browser for UI acceptance following `docs/development/browser-acceptance.md`. Name Python tests `test_*.py` and frontend tests `*.test.ts`. There is no numeric coverage threshold; cover ownership, JWT expiry, cancellation, reconnect, failure, and cleanup behavior. Use the configured administrator account and real project model for end-to-end acceptance by default; label test conversations and preserve existing data. Keep deterministic tests for failure/expiry cases, and report them separately from real-model acceptance.
 
 ## Runtime & Contributions
 
-Preserve per-user container mounts and the single-instance lock. Keep credentials and runtime data outside tracked files. Use `agent_settled` for completion; clear queues before aborting. Keep unsupported UI actions hidden.
+Use the official-template Bearer JWT flow for API and SSE; follow `README.md` for token lifetime and logout semantics. Preserve per-user container mounts and the single-instance lock. Keep credentials and runtime data outside tracked files. Database foreign-key enforcement is intentionally disabled; enforce ownership and lifecycle rules in the application. For logging changes, follow `docs/development/logging.md`. Use `agent_settled` for completion; clear queues before aborting. Keep unsupported UI actions hidden.
 
 No Git history existed when scaffolding. Adopt Conventional Commits. PRs should explain behavior, link relevant issues or design decisions, state validation and remaining limitations, and include screenshots for UI changes.
 

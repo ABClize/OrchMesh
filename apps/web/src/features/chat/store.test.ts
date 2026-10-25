@@ -16,29 +16,25 @@ test("reconnect snapshot plus deltas preserves content blocks and replaces final
     run_id: "run",
     cursor: 10,
   });
-  useChat
-    .getState()
-    .event({
-      type: "message_update",
-      assistantMessageEvent: {
-        type: "text_delta",
-        contentIndex: 0,
-        delta: " world",
-      },
-    });
+  useChat.getState().event({
+    type: "message_update",
+    assistantMessageEvent: {
+      type: "text_delta",
+      contentIndex: 0,
+      delta: " world",
+    },
+  });
   expect(useChat.getState().messages[0].content).toEqual([
     { type: "text", text: "hello world" },
   ]);
-  useChat
-    .getState()
-    .event({
-      type: "message_end",
-      message: {
-        role: "assistant",
-        timestamp: 1,
-        content: [{ type: "text", text: "authoritative" }],
-      },
-    });
+  useChat.getState().event({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      timestamp: 1,
+      content: [{ type: "text", text: "authoritative" }],
+    },
+  });
   expect(useChat.getState().messages).toHaveLength(1);
   expect(useChat.getState().messages[0].content).toEqual([
     { type: "text", text: "authoritative" },
@@ -69,7 +65,7 @@ test("Pi tool results attach to original call without becoming duplicate bubbles
     expect.objectContaining({
       type: "tool-call",
       toolCallId: "call1",
-      result: [{ type: "text", text: "/workspace" }],
+      result: "/workspace",
     }),
   ]);
 });

@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from orchmesh.config import Settings
+from orchmesh.pi.configuration import sync_model
 from orchmesh.pi.containers import Containers
 from orchmesh.pi.rpc import RPC
 
@@ -106,32 +107,22 @@ async def test_real_pi_stream_tools_abort_isolation_and_restore(tmp_path):
     server = ThreadingHTTPServer((gateway, 0), Model)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    settings = Settings(data_dir=tmp_path)
+    settings = Settings(
+        _env_file=None,
+        bootstrap_admin_email="",
+        bootstrap_admin_password="",
+        model_base_url=f"http://{gateway}:{server.server_port}/v1",
+        model_api="openai-completions",
+        model_api_key="test-only",
+        model_id="fixture",
+        data_dir=tmp_path,
+    )
     containers = Containers(settings)
     user_id, conversation_id = uuid.uuid4(), uuid.uuid4()
     root = containers.prepare(user_id)
     other = containers.prepare(uuid.uuid4())
     (other / "work/other-secret.txt").write_text("not visible")
-    config = root / "config"
-    (config / "models.json").write_text(
-        json.dumps(
-            {
-                "providers": {
-                    "fixture": {
-                        "baseUrl": f"http://{gateway}:{server.server_port}/v1",
-                        "api": "openai-completions",
-                        "apiKey": "test-only",
-                        "models": [
-                            {"id": "fixture", "contextWindow": 32768, "maxTokens": 4096}
-                        ],
-                    }
-                }
-            }
-        )
-    )
-    (config / "settings.json").write_text(
-        json.dumps({"defaultProvider": "fixture", "defaultModel": "fixture"})
-    )
+    sync_model(settings, user_id)
     records = []
     settled = asyncio.Event()
 

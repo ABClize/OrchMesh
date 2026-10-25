@@ -7,10 +7,9 @@ import os
 import subprocess
 import uuid
 
-from fastapi_users.db import SQLAlchemyUserDatabase
 from sqlalchemy import select
 
-from .auth import UserCreate, UserManager
+from .accounts import UserCreate, create_account
 from .config import Settings
 from .pi.containers import Containers
 from .storage import Database, User
@@ -25,8 +24,8 @@ async def create_user(email: str):
         raise SystemExit("Passwords do not match")
     try:
         async with db.sessions() as session:
-            user = await UserManager(SQLAlchemyUserDatabase(session, User)).create(
-                UserCreate(email=email, password=password), safe=True
+            user = await create_account(
+                session, UserCreate(email=email, password=password)
             )
             root = Containers(settings).prepare(user.id)
             print(
@@ -92,6 +91,9 @@ def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description="OrchMesh local administration")
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("run")
+    sub.add_parser("dev")
+    sub.add_parser("build-image")
     create = sub.add_parser("create-user")
     create.add_argument("email")
     config = sub.add_parser("configure-pi")
@@ -101,7 +103,27 @@ def main():
     login = sub.add_parser("pi-login")
     login.add_argument("email")
     args = parser.parse_args()
-    if args.command == "create-user":
+    if args.command in ("run", "dev"):
+        from .serve import serve
+
+        serve(dev=args.command == "dev")
+    elif args.command == "build-image":
+        from .config import ROOT
+
+        subprocess.run(
+            [
+                "docker",
+                "build",
+                "-f",
+                "deploy/pi.Dockerfile",
+                "-t",
+                Settings().pi_image,
+                ".",
+            ],
+            cwd=ROOT,
+            check=True,
+        )
+    elif args.command == "create-user":
         asyncio.run(create_user(args.email))
     elif args.command == "configure-pi":
         asyncio.run(configure_pi(args.email, args.provider, args.model))
