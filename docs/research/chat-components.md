@@ -1,5 +1,7 @@
 # 聊天展示组件选型
 
+> 历史调研资料（2026-10-26），保留当时的候选与验证范围，不作为当前部署或实现说明。当前选型、目录和验收请看 [项目结构](../architecture/project-blueprint.md) 与 [当前架构](../architecture/v0.1-simplified.md)。
+
 核查日期：2026-10-26。面向 React + Vite、FastAPI 自有 HTTP/SSE、Pi 执行工具的 OrchMesh。本文是文档与源码层面选型，未安装依赖、启动浏览器或完成 Pi 端到端验证。
 
 ## 结论

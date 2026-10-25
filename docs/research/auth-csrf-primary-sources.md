@@ -1,5 +1,7 @@
 # 认证与 CSRF：官方及成熟项目对照
 
+> 历史调研资料（2026-10-26），保留当时的候选与验证范围，不作为当前部署或实现说明。当前选型、目录和验收请看 [项目结构](../architecture/project-blueprint.md) 与 [当前架构](../architecture/v0.1-simplified.md)。
+
 > 历史调研：2026-10-26 用户已决定采用官方模板 Bearer JWT 方案。当前实现与验收见 `../development/implementation.md` 和根目录 README；本文保留当时的选型证据，不作为当前实现指令。
 调研日期：2026-10-26。范围：同源 React + FastAPI、少量受邀用户、服务端可撤销会话。本文只记录来源与适用性判断，不改变代码、依赖或运行服务。`main/master/latest/stable` 是当日页面快照；有标签的证据单独注明，不能把开发分支等同于已发布行为。
 

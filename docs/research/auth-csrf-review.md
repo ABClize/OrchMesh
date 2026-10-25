@@ -1,5 +1,7 @@
 # OrchMesh 登录与 CSRF 审查
 
+> 历史调研资料（2026-10-26），保留当时的候选与验证范围，不作为当前部署或实现说明。当前选型、目录和验收请看 [项目结构](../architecture/project-blueprint.md) 与 [当前架构](../architecture/v0.1-simplified.md)。
+
 > 历史调研：2026-10-26 用户已决定采用官方模板 Bearer JWT 方案。当前实现与验收见 `../development/implementation.md` 和根目录 README；本文保留当时的选型证据，不作为当前实现指令。
 日期：2026-10-26。范围：当前源码、已安装 FastAPI Users/starlette-csrf、官方资料与一个临时公共 API 验证。仅研究与审查，未修改运行代码、数据库、凭据或依赖锁文件，未重启服务。外部对照见 [一手资料](auth-csrf-primary-sources.md)。这不是完整的渗透测试或安全认证。
 

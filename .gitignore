@@ -28,3 +28,7 @@ tmp/
 *.p12
 *.pfx
 *.log
+
+# Rotated logs and log directories, including custom runtime locations
+*.log.*
+**/logs/

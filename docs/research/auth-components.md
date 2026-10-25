@@ -1,5 +1,7 @@
 # 认证组件调研与首版选型
 
+> 历史调研资料（2026-10-26），保留当时的候选与验证范围，不作为当前部署或实现说明。当前选型、目录和验收请看 [项目结构](../architecture/project-blueprint.md) 与 [当前架构](../architecture/v0.1-simplified.md)。
+
 > 历史调研：2026-10-26 用户已决定采用官方模板 Bearer JWT 方案。当前实现与验收见 `../development/implementation.md` 和根目录 README；本文保留当时的选型证据，不作为当前实现指令。
 核查日期：2026-10-26。场景：FastAPI、SQLite、管理员为本人和少量熟人开通账号；同源 Web 页面和 API，需要可撤销的登录会话。本文是文档/源码核查，未安装或运行组件。
 
