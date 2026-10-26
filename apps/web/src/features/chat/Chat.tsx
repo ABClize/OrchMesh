@@ -1,3 +1,4 @@
+import { ActivityPanel } from "./ActivityPanel";
 import {
   useEffect,
   useMemo,
@@ -37,6 +38,7 @@ export function Chat({
   const mounted = useRef(true);
   const query = useQueryClient();
   const source = useRef<AbortController | null>(null);
+  const [reviewTools, setReviewTools] = useState(true);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState(false);
   const messages = useMemo(
@@ -128,13 +130,14 @@ export function Chat({
         .join("\n");
       useChat.setState({ status: "running", error: null });
       try {
-        await sendPrompt(id, text);
+        await sendPrompt(id, text, reviewTools);
         if (!mounted.current) return;
         subscribe();
         void query.invalidateQueries({ queryKey: ["conversations"] });
       } catch (error) {
         if (!mounted.current) return;
         useChat.setState({ status: "failed", error: (error as Error).message });
+        throw error;
       }
     },
     onCancel: async () => {
@@ -152,8 +155,7 @@ export function Chat({
         {state.read_only && (
           <Alert className="mx-auto mt-3 max-w-3xl">
             <AlertDescription>
-              此对话为只读。归档项目或会话请在侧栏恢复；旧 Pi
-              历史请新建对话继续。
+              此对话为只读，请在侧栏恢复归档会话后继续。
             </AlertDescription>
           </Alert>
         )}
@@ -167,6 +169,22 @@ export function Chat({
             </AlertDescription>
           </Alert>
         )}
+        {!state.read_only && state.status !== "running" && (
+          <label className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 pt-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={reviewTools}
+              disabled={state.status === "running"}
+              onChange={(e) => setReviewTools(e.target.checked)}
+            />
+            本轮工具审批（每次执行前确认）
+          </label>
+        )}
+        <ActivityPanel
+          id={id}
+          running={state.status === "running"}
+          enabled={!loading}
+        />
         <Thread components={components} />
       </div>
     </AssistantRuntimeProvider>

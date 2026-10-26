@@ -31,6 +31,7 @@ export function DraftChat({
       mounted.current = false;
     };
   }, []);
+  const [reviewTools, setReviewTools] = useState(true);
   const [error, setError] = useState("");
   const runtime = useExternalStoreRuntime({
     messages,
@@ -43,7 +44,7 @@ export function DraftChat({
       setError("");
       onBusyChange(true);
       try {
-        const id = await sender.current(text);
+        const id = await sender.current(text, reviewTools);
         if (mounted.current) onStarted(id);
       } catch (cause) {
         if (mounted.current) setError((cause as Error).message);
@@ -60,6 +61,14 @@ export function DraftChat({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+      <label className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 pt-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={reviewTools}
+          onChange={(e) => setReviewTools(e.target.checked)}
+        />
+        本轮工具审批（每次执行前确认）
+      </label>
       <Thread components={components} />
     </AssistantRuntimeProvider>
   );

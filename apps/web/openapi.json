@@ -66,6 +66,221 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/activity": {
+      "get": {
+        "summary": "Read",
+        "operationId": "read_api_conversations__conversation_id__activity_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Read Api Conversations  Conversation Id  Activity Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Act",
+        "operationId": "act_api_conversations__conversation_id__activity_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivityAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Act Api Conversations  Conversation Id  Activity Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/activity/children/{child_id}": {
+      "get": {
+        "summary": "Child History",
+        "operationId": "child_history_api_conversations__conversation_id__activity_children__child_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "child_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Child Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Child History Api Conversations  Conversation Id  Activity Children  Child Id  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspace/entries": {
       "get": {
         "tags": [
@@ -1249,6 +1464,158 @@
         ],
         "title": "APIError"
       },
+      "ActivityAction": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "answer",
+              "prompt",
+              "queue",
+              "child-stop"
+            ],
+            "title": "Kind"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "allowed-once",
+                  "rejected"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "answers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AnswerItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answers"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "queue",
+              "steer"
+            ],
+            "title": "Mode",
+            "default": "queue"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "edit",
+                  "remove",
+                  "steer"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "child_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Child Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "ActivityAction"
+      },
+      "AnswerItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "selected": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Selected"
+          },
+          "custom": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "AnswerItem"
+      },
       "Body_login_api_login_access_token_post": {
         "properties": {
           "grant_type": {
@@ -1559,6 +1926,11 @@
             "maxLength": 32000,
             "minLength": 1,
             "title": "Text"
+          },
+          "review_tools": {
+            "type": "boolean",
+            "title": "Review Tools",
+            "default": false
           }
         },
         "type": "object",
@@ -1628,6 +2000,18 @@
             "type": "boolean",
             "title": "Read Only",
             "default": false
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity"
           },
           "error": {
             "anyOf": [

@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .accounts import UserRead
+from .activity import router as activity_router
 from .auth import Auth, bearer
 from .bootstrap import bootstrap
 from .config import Settings
@@ -58,6 +59,7 @@ class ReasoningPreference(BaseModel):
 
 class Prompt(BaseModel):
     text: str = Field(min_length=1, max_length=32000)
+    review_tools: bool = False
 
 
 class RunRead(BaseModel):
@@ -70,6 +72,7 @@ class Snapshot(BaseModel):
     run_id: str | None
     cursor: int
     read_only: bool = False
+    activity: dict | None = None
     error: str | None = None
 
 
@@ -101,6 +104,7 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
     )
     app.state.db, app.state.manager, app.state.auth = db, manager, auth
     app.include_router(auth.router)
+    app.include_router(activity_router(auth, db, manager))
     app.include_router(workspace_router(settings, auth, db))
     app.include_router(projects_router(settings, auth, db, manager.navigation))
 
@@ -315,7 +319,11 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
             raise HTTPException(422, "Message must not be blank")
         try:
             run = await manager.start(
-                user.id, conversation_id, body.text, conversation.reasoning
+                user.id,
+                conversation_id,
+                body.text,
+                conversation.reasoning,
+                body.review_tools,
             )
         except Busy as exc:
             raise HTTPException(409, str(exc)) from exc

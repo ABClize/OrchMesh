@@ -68,6 +68,7 @@ try {
     {
       insert: [
         ...[
+          "tool-ask-user",
           "workspace",
           "client-connection",
           "client-file-upload",

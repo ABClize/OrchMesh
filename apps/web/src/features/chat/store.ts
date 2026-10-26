@@ -28,6 +28,7 @@ export type Snapshot = {
   run_id: string | null;
   cursor: number;
   read_only?: boolean;
+  activity?: import("./activity-types").Activity | null;
   error?: string | null;
 };
 type PiEvent = {
@@ -59,6 +60,7 @@ const empty = {
   error: null,
   current: null,
   read_only: false,
+  activity: null,
 } satisfies Snapshot & { current: null };
 
 export const useChat = create<State>((set) => ({

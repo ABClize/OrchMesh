@@ -3,6 +3,7 @@ import uuid
 from collections import deque
 from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import wraps
 
 from sqlalchemy import select, update
 
@@ -18,6 +19,17 @@ from .rpc import RPC
 
 class Busy(Exception):
     pass
+
+
+def serialized_host(method):
+    """Serialize host lifecycle operations without blocking live agent work."""
+
+    @wraps(method)
+    async def call(self, user_id, *args, **kwargs):
+        async with self.host_locks.setdefault(user_id, asyncio.Lock()):
+            return await method(self, user_id, *args, **kwargs)
+
+    return call
 
 
 @dataclass
@@ -39,6 +51,10 @@ class Execution:
     reasoning: str = "default"
     stopping: bool = False
     finished: bool = False
+    review_tools: bool = False
+    control_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    admissions: int = 0
+    activity_state: dict | None = None
 
     def emit(self, data: dict):
         self.sequence += 1
@@ -60,6 +76,7 @@ class Execution:
             "error": self.error,
             "messages": self.projection.messages,
             "cursor": self.sequence,
+            "activity": self.activity_state,
         }
 
 
@@ -69,8 +86,10 @@ class Manager:
         self.containers = containers or Containers(settings)
         self.active: dict[uuid.UUID, Execution] = {}
         self.reading: set[uuid.UUID] = set()
+        self.host_locks: dict[uuid.UUID, asyncio.Lock] = {}
         self.navigation = Navigation(self)
 
+    @serialized_host
     async def control(
         self, user_id, method, *, conversation_id=None, workspace_id=None, **params
     ):
@@ -135,14 +154,26 @@ class Manager:
             user_id, conversation_id, project_id, control=control
         )
 
+    @serialized_host
     async def start(
-        self, user_id, conversation_id, prompt: str, reasoning: str = "default"
+        self,
+        user_id,
+        conversation_id,
+        prompt: str,
+        reasoning: str = "default",
+        review_tools: bool = False,
     ) -> Execution:
         if user_id in self.active or user_id in self.reading:
             raise Busy("该用户已有任务正在运行")
         if len(self.active) + len(self.reading) >= self.settings.max_active_runs:
             raise Busy("运行容量已满，请稍后再试")
-        run = Execution(uuid.uuid4(), user_id, conversation_id, reasoning=reasoning)
+        run = Execution(
+            uuid.uuid4(),
+            user_id,
+            conversation_id,
+            reasoning=reasoning,
+            review_tools=review_tools,
+        )
         self.active[user_id] = run
         try:
             async with self.db.sessions() as session:
@@ -180,6 +211,7 @@ class Manager:
             result = await rpc.call(
                 "orchmesh/open",
                 sessionId=str(run.conversation_id),
+                reviewTools=run.review_tools,
             )
             messages, _ = history(result["events"])
             run.projection = Messages(messages)
@@ -192,16 +224,23 @@ class Manager:
             )
             stage = "generation"
             run.ready.set()
-            await rpc.call(
-                "session/wait",
-                timeout=self.settings.run_timeout,
-                sessionId=str(run.conversation_id),
-            )
-            run.settled.set()
+            while True:
+                admitted = run.admissions
+                await rpc.call(
+                    "session/wait",
+                    timeout=self.settings.run_timeout,
+                    sessionId=str(run.conversation_id),
+                )
+                async with run.control_lock:
+                    if admitted != run.admissions:
+                        continue
+                    run.settled.set()
+                    break
             stage = "history"
             result = await rpc.call(
                 "orchmesh/history", sessionId=str(run.conversation_id)
             )
+            run.activity_state = result.get("activity")
             messages, reason = history(result["events"])
             run.projection = Messages(messages)
             failed = reason in ("error", "blocked", "max-tokens", "interrupted")
@@ -276,6 +315,7 @@ class Manager:
                 run.task.cancel()
                 await run.task
 
+    @serialized_host
     async def history(self, user_id, conversation_id):
         run = self.active.get(user_id)
         if run:
@@ -300,6 +340,7 @@ class Manager:
             return {
                 "messages": messages,
                 "read_only": data.get("archived", False),
+                "activity": data.get("activity"),
                 "status": "idle",
                 "run_id": None,
                 "cursor": 0,
@@ -312,6 +353,32 @@ class Manager:
                 await rpc.close()
                 self.reading.discard(user_id)
 
+    async def activity(
+        self, user_id, conversation_id, method, *, mutate=False, **params
+    ):
+        run = self.active.get(user_id)
+        if not run:
+            if mutate:
+                raise Busy("任务已结束，请发送新消息")
+            return await self.control(
+                user_id,
+                method,
+                conversation_id=conversation_id,
+                sessionId=conversation_id,
+                **params,
+            )
+        if run.conversation_id != conversation_id:
+            raise Busy("请等待当前任务结束后查看其他对话")
+        await asyncio.wait_for(run.ready.wait(), 30)
+        async with run.control_lock:
+            if not run.rpc or run.finished or run.stopping or run.settled.is_set():
+                raise Busy("任务正在结束，请稍后刷新")
+            value = await run.rpc.call(method, sessionId=conversation_id, **params)
+            if mutate:
+                run.admissions += 1
+            return value
+
+    @serialized_host
     async def model_info(self, user_id):
         run = self.active.get(user_id)
         if run:

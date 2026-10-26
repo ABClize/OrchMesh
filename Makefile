@@ -25,6 +25,7 @@ run:
 
 check:
 	node --check apps/runtime/bridge.mjs
+	node --check apps/runtime/interactions.mjs
 	node --check apps/runtime/launch.mjs
 	uv run --directory apps/server ruff check src tests
 	uv run --directory apps/server ruff format --check src tests

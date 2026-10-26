@@ -49,7 +49,7 @@ const Chat = lazy(() =>
 const DraftChat = lazy(() =>
   import("@/features/chat/DraftChat").then((m) => ({ default: m.DraftChat })),
 );
-import { useAuth } from "@/features/auth/useAuth";
+import { useAuth, resetAuthCache } from "@/features/auth/useAuth";
 import { useChat } from "@/features/chat/store";
 
 const queryClient = new QueryClient({
@@ -99,8 +99,7 @@ function Workspace() {
         setProjectId(null);
         setStarting(false);
         useChat.getState().reset();
-        query.clear();
-        void query.invalidateQueries({ queryKey: ["me"] });
+        void resetAuthCache(query);
       }),
     [query],
   );
@@ -110,7 +109,6 @@ function Workspace() {
     setProjectId(null);
     setId(null);
     useChat.getState().reset();
-    query.clear();
     query.setQueryData(["me"], null);
   }
   const createChat = useMutation({

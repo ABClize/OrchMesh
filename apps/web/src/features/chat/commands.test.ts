@@ -25,7 +25,7 @@ test("a failed first send retains the created conversation for explicit retry", 
     "/api/conversations/{conversation_id}/runs",
     {
       params: { path: { conversation_id: "draft-1" } },
-      body: { text: "retry" },
+      body: { text: "retry", review_tools: false },
     },
   ]);
 });

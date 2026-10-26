@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { api, login } from "../../lib/api";
 
 export async function currentUser(signal?: AbortSignal) {
@@ -20,4 +25,10 @@ export function useAuth() {
     onSuccess: () => query.invalidateQueries({ queryKey: ["me"] }),
   });
   return { me, signIn };
+}
+
+// Keep the observed identity query attached; discard all account-scoped data.
+export function resetAuthCache(query: QueryClient) {
+  query.removeQueries({ predicate: (entry) => entry.queryKey[0] !== "me" });
+  return query.resetQueries({ queryKey: ["me"] });
 }

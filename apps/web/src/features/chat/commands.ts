@@ -9,10 +9,17 @@ export async function createConversation(projectId: string | null = null) {
   return data;
 }
 
-export async function sendPrompt(id: string, text: string) {
+export async function sendPrompt(
+  id: string,
+  text: string,
+  reviewTools = false,
+) {
   const { error, response } = await api.POST(
     "/api/conversations/{conversation_id}/runs",
-    { params: { path: { conversation_id: id } }, body: { text } },
+    {
+      params: { path: { conversation_id: id } },
+      body: { text, review_tools: reviewTools },
+    },
   );
   if (error)
     throw new Error(
@@ -27,11 +34,11 @@ export async function sendPrompt(id: string, text: string) {
 export function createDraftSender(projectId: string | null = null) {
   let conversation: string | null = null;
   const session = getToken();
-  return async (text: string) => {
+  return async (text: string, reviewTools = false) => {
     if (getToken() !== session) throw new Error("登录状态已改变，请重新登录。");
     conversation ??= (await createConversation(projectId)).id;
     if (getToken() !== session) throw new Error("登录状态已改变，请重新登录。");
-    await sendPrompt(conversation, text);
+    await sendPrompt(conversation, text, reviewTools);
     return conversation;
   };
 }

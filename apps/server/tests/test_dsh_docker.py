@@ -53,7 +53,41 @@ class Model(BaseHTTPRequestHandler):
 
         try:
             chunk({"role": "assistant"})
-            if self.mode == "tools" and self.calls == 1:
+            if self.mode == "interactive" and self.calls <= 2:
+                name = "bash" if self.calls == 1 else "ask_user_question"
+                args = (
+                    {
+                        "command": "printf approved > approved.txt",
+                        "description": "Approval test",
+                    }
+                    if self.calls == 1
+                    else {
+                        "questions": [
+                            {
+                                "id": "language",
+                                "question": "Choose language",
+                                "options": [{"label": "Chinese"}, {"label": "English"}],
+                            }
+                        ]
+                    }
+                )
+                chunk(
+                    {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": f"interactive-{self.calls}",
+                                "type": "function",
+                                "function": {
+                                    "name": name,
+                                    "arguments": json.dumps(args),
+                                },
+                            }
+                        ]
+                    }
+                )
+                chunk({}, "tool_calls")
+            elif self.mode == "tools" and self.calls == 1:
                 chunk(
                     {
                         "tool_calls": [
@@ -334,3 +368,125 @@ async def test_control_navigation_needs_no_model_credentials(tmp_path):
     finally:
         await containers.kill(uid)
         await rpc.close()
+
+
+@pytest.mark.parametrize("outcome", ["allowed-once", "rejected"])
+async def test_official_approval_questions_and_queue(tmp_path, outcome):
+    gateway = subprocess.check_output(
+        [
+            "docker",
+            "network",
+            "inspect",
+            "bridge",
+            "--format",
+            "{{(index .IPAM.Config 0).Gateway}}",
+        ],
+        text=True,
+    ).strip()
+    model = ThreadingHTTPServer((gateway, 0), Model)
+    threading.Thread(target=model.serve_forever, daemon=True).start()
+    Model.calls, Model.mode = 0, "interactive"
+    settings = Settings(
+        _env_file=None,
+        data_dir=tmp_path,
+        model_base_url=f"http://{gateway}:{model.server_port}/v1",
+        model_api_key="test-only",
+        model_id="fixture",
+    )
+    containers = Containers(settings)
+    uid, cid = uuid.uuid4(), str(uuid.uuid4())
+    sync_model(settings, uid)
+    rpc = RPC(containers.command(uid, cid), lambda _: None)
+
+    async def request(kind):
+        for _ in range(200):
+            activity = await rpc.call("activity/read", sessionId=cid)
+            found = next((r for r in activity["requests"] if r["kind"] == kind), None)
+            if found:
+                return found
+            await asyncio.sleep(0.05)
+        raise AssertionError(f"No {kind} request")
+
+    try:
+        await rpc.start()
+        await rpc.call("initialize")
+        await rpc.call("orchmesh/open", sessionId=cid, reviewTools=True)
+        await rpc.call(
+            "session/prompt",
+            sessionId=cid,
+            contentBlocks=[{"type": "text", "text": "Interactive test"}],
+        )
+        approval = await request("approval")
+        assert not (containers.user_dir(uid) / "work/approved.txt").exists()
+        # Human waits do not block admission or modification of the official inbox.
+        await rpc.call(
+            "session/prompt",
+            sessionId=cid,
+            contentBlocks=[{"type": "text", "text": "Queued original"}],
+        )
+        state = await rpc.call("activity/read", sessionId=cid)
+        item = state["inbox"]["next-turn"][0]
+        await rpc.call(
+            "activity/queue",
+            sessionId=cid,
+            itemId=item["id"],
+            action={"kind": "edit", "content": [{"type": "text", "text": "Edited"}]},
+        )
+        await rpc.call(
+            "activity/queue",
+            sessionId=cid,
+            itemId=item["id"],
+            action={"kind": "remove"},
+        )
+        assert not (await rpc.call("activity/read", sessionId=cid))["inbox"][
+            "next-turn"
+        ]
+        await rpc.call(
+            "activity/answer", sessionId=cid, requestId=approval["id"], outcome=outcome
+        )
+        with pytest.raises(RuntimeError):
+            await rpc.call(
+                "activity/answer",
+                sessionId=cid,
+                requestId=approval["id"],
+                outcome="allowed-once",
+            )
+        question = await request("question")
+        with pytest.raises(RuntimeError):
+            await rpc.call(
+                "activity/answer", sessionId=cid, requestId=question["id"], answers=[]
+            )
+        await rpc.call(
+            "activity/answer",
+            sessionId=cid,
+            requestId=question["id"],
+            answers=[{"id": "language", "selected": ["Chinese"]}],
+        )
+        await rpc.call("session/wait", sessionId=cid, timeout=30)
+        assert (containers.user_dir(uid) / "work/approved.txt").exists() == (
+            outcome == "allowed-once"
+        )
+        assert not (await rpc.call("activity/read", sessionId=cid))["requests"]
+        # Cancellation withdraws the request; late answers cannot approve later calls.
+        Model.calls = 0
+        await rpc.call(
+            "session/prompt",
+            sessionId=cid,
+            contentBlocks=[{"type": "text", "text": "Cancel test"}],
+        )
+        withdrawn = await request("approval")
+        await rpc.call("orchmesh/stop", sessionId=cid)
+        await rpc.call("session/wait", sessionId=cid)
+        assert not (await rpc.call("activity/read", sessionId=cid))["requests"]
+        with pytest.raises(RuntimeError):
+            await rpc.call(
+                "activity/answer",
+                sessionId=cid,
+                requestId=withdrawn["id"],
+                outcome="allowed-once",
+            )
+    finally:
+        await containers.kill(uid)
+        await rpc.close()
+        model.shutdown()
+        model.server_close()

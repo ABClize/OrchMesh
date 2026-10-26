@@ -69,3 +69,15 @@ test("Pi tool results attach to original call without becoming duplicate bubbles
     }),
   ]);
 });
+
+test("changing conversation clears its private activity snapshot", () => {
+  useChat.setState({
+    activity: {
+      requests: [{ id: "pending", kind: "approval", sessionId: "private" }],
+      inbox: { "next-step": [], "next-turn": [] },
+      children: [],
+    },
+  });
+  useChat.getState().reset();
+  expect(useChat.getState().activity).toBeNull();
+});

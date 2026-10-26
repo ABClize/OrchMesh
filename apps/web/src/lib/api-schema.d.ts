@@ -21,6 +21,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/conversations/{conversation_id}/activity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read */
+    get: operations["read_api_conversations__conversation_id__activity_get"];
+    put?: never;
+    /** Act */
+    post: operations["act_api_conversations__conversation_id__activity_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/conversations/{conversation_id}/activity/children/{child_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Child History */
+    get: operations["child_history_api_conversations__conversation_id__activity_children__child_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/workspace/entries": {
     parameters: {
       query?: never;
@@ -272,6 +307,43 @@ export interface components {
       /** Detail */
       detail: string;
     };
+    /** ActivityAction */
+    ActivityAction: {
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "answer" | "prompt" | "queue" | "child-stop";
+      /** Request Id */
+      request_id?: string | null;
+      /** Outcome */
+      outcome?: ("allowed-once" | "rejected") | null;
+      /** Answers */
+      answers?: components["schemas"]["AnswerItem"][] | null;
+      /** Text */
+      text?: string | null;
+      /**
+       * Mode
+       * @default queue
+       * @enum {string}
+       */
+      mode: "queue" | "steer";
+      /** Item Id */
+      item_id?: string | null;
+      /** Action */
+      action?: ("edit" | "remove" | "steer") | null;
+      /** Child Id */
+      child_id?: string | null;
+    };
+    /** AnswerItem */
+    AnswerItem: {
+      /** Id */
+      id: string;
+      /** Selected */
+      selected?: string[];
+      /** Custom */
+      custom?: string | null;
+    };
     /** Body_login_api_login_access_token_post */
     Body_login_api_login_access_token_post: {
       /** Grant Type */
@@ -378,6 +450,11 @@ export interface components {
     Prompt: {
       /** Text */
       text: string;
+      /**
+       * Review Tools
+       * @default false
+       */
+      review_tools: boolean;
     };
     /** ReasoningPreference */
     ReasoningPreference: {
@@ -409,6 +486,10 @@ export interface components {
        * @default false
        */
       read_only: boolean;
+      /** Activity */
+      activity?: {
+        [key: string]: unknown;
+      } | null;
       /** Error */
       error?: string | null;
     };
@@ -480,6 +561,164 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Token"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  read_api_conversations__conversation_id__activity_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  act_api_conversations__conversation_id__activity_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ActivityAction"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  child_history_api_conversations__conversation_id__activity_children__child_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+        child_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
       };
       /** @description Unauthorized */

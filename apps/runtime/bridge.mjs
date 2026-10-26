@@ -1,8 +1,13 @@
+import { interactions } from "./interactions.mjs";
+import { setApprovalPolicy } from "@deepseek-ai/dsh-user-approval";
 import { HarnessSdkJsonRpcServer } from "@deepseek-ai/dsh-sdk-jsonrpc-server";
 import { JsonRpcLineTransport } from "@deepseek-ai/dsh-sdk-protocol";
 export const name = "orchmesh";
 export const inject = [
   "agents",
+  "approval",
+  "userQuestions",
+  "subagents",
   "sessions",
   "workingDirectory",
   "sessionPersistence",
@@ -14,6 +19,7 @@ export const inject = [
 ];
 export function apply(ctx) {
   let selection;
+  const activity = interactions(ctx);
   const transport = new JsonRpcLineTransport(process.stdin, process.stdout);
   const server = new HarnessSdkJsonRpcServer(ctx, transport, {
     maxTokensAsSuccess: false,
@@ -62,6 +68,8 @@ export function apply(ctx) {
         "project/rename",
         "session/create",
         "orchmesh/history",
+        "activity/read",
+        "activity/child-history",
         "session/rename",
         "session/fork",
         "project/delete",
@@ -70,6 +78,7 @@ export function apply(ctx) {
       ].includes(method)
     )
       throw new Error("Control host does not execute sessions");
+    if (method.startsWith("activity/")) return activity.handle(method, params);
     if (method === "orchmesh/open") {
       const saved = await ctx.sessionPersistence.stat(params.sessionId);
       if (!ctx.agents.get(params.sessionId)) {
@@ -77,6 +86,9 @@ export function apply(ctx) {
         else
           await server.handleRequest("session/working-directory/get", params);
       }
+      activity.configure(params.reviewTools ?? false);
+      if (params.reviewTools)
+        setApprovalPolicy(ctx.sessions.get(params.sessionId), "ask");
       await ctx.sessionController.selectModel({
         sessionId: params.sessionId,
         ...selection,
@@ -87,6 +99,7 @@ export function apply(ctx) {
     }
     if (method === "orchmesh/history") {
       return {
+        activity: await activity.handle("activity/read", params),
         events: (await ctx.sessionController.inspect(params.sessionId)).events,
         archived: ctx.workspaceRegistry.archivedSessionIds.includes(
           params.sessionId,
@@ -98,7 +111,7 @@ export function apply(ctx) {
         {
           sessionId: params.sessionId,
           requestId: params.requestId ?? crypto.randomUUID(),
-          mode: "queue",
+          mode: params.mode ?? "queue",
           content: params.contentBlocks,
         },
         new AbortController().signal,
