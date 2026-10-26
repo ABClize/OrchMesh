@@ -1,4 +1,5 @@
 import asyncio
+import time
 import uuid
 from collections import deque
 from copy import deepcopy
@@ -9,7 +10,7 @@ from sqlalchemy import select, update
 
 from ..config import Settings
 from ..logging import failure, logger
-from ..storage import Conversation, Database, Run
+from ..storage import Database, Run
 from .containers import Containers
 from .events import Adapter, history
 from .messages import Messages
@@ -30,6 +31,12 @@ def serialized_host(method):
             return await method(self, user_id, *args, **kwargs)
 
     return call
+
+
+@dataclass
+class UserHost:
+    rpc: RPC
+    expires: float
 
 
 @dataclass
@@ -88,50 +95,159 @@ class Manager:
         self.reading: set[uuid.UUID] = set()
         self.host_locks: dict[uuid.UUID, asyncio.Lock] = {}
         self.navigation = Navigation(self)
+        self.hosts: dict[uuid.UUID, UserHost] = {}
+        self.host_reaper: asyncio.Task | None = None
+        self.host_allocation = asyncio.Lock()
+        self.warming: dict[uuid.UUID, asyncio.Task] = {}
+        self.closing = False
+
+    def prewarm(self, user_id):
+        """Login returns immediately; subsequent requests share the same startup."""
+        if self.closing or user_id in self.warming:
+            return
+
+        async def warm():
+            try:
+                async with self.host_locks.setdefault(user_id, asyncio.Lock()):
+                    await self.get_host(user_id)
+            except Exception as exc:
+                failure("runtime.warm_failure", exc, user_id=user_id)
+            finally:
+                self.warming.pop(user_id, None)
+
+        self.warming[user_id] = asyncio.create_task(warm())
 
     @serialized_host
     async def control(
         self, user_id, method, *, conversation_id=None, workspace_id=None, **params
     ):
+        return await self._control(
+            user_id,
+            method,
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+            **params,
+        )
+
+    async def _control(
+        self, user_id, method, *, conversation_id=None, workspace_id=None, **params
+    ):
         run = self.active.get(user_id)
-        if run:
-            if method not in ("navigation/list", "navigation/update", "project/rename"):
-                raise Busy("请等待当前任务结束后操作工作区")
-            await asyncio.wait_for(run.ready.wait(), 30)
-            if not run.rpc or run.finished:
-                raise Busy("任务正在结束，请重试")
-            return await run.rpc.call(method, **params)
+        if run and method not in (
+            "navigation/list",
+            "navigation/update",
+            "project/rename",
+            "orchmesh/model",
+        ):
+            raise Busy("请等待当前任务结束后操作工作区")
         if user_id in self.reading:
             raise Busy("工作区状态正在读取，请重试")
-        if len(self.active) + len(self.reading) >= self.settings.max_active_runs:
-            raise Busy("运行容量已满，请稍后再试")
         self.reading.add(user_id)
-        rpc = None
         try:
-            if workspace_id is not None:
-                command = self.containers.command(
-                    user_id, conversation_id, workspace_id, control=True
-                )
-            else:
-                command = (
-                    await self.command(user_id, conversation_id, control=True)
-                    if conversation_id
-                    else self.containers.command(user_id, None)
-                )
-            rpc = RPC(command, lambda _: None)
+            host = await self.get_host(user_id)
+            result = await host.rpc.call(method, **params)
+            self.touch_host(user_id)
+            return result
+        except BaseException:
+            # Do not replay commands after a disconnect or unknown mutation result.
+            if not run:
+                await self.release_host(user_id)
+            raise
+        finally:
+            self.reading.discard(user_id)
+
+    def touch_host(self, user_id):
+        host = self.hosts.get(user_id)
+        if host:
+            host.expires = time.monotonic() + self.settings.runtime_idle_seconds
+
+    async def get_host(self, user_id):
+        """Caller holds user lock; serialize allocation across users."""
+        async with self.host_allocation:
+            return await self._get_host(user_id)
+
+    async def _get_host(self, user_id):
+        self.containers.prepare_workspaces(user_id)
+        host = self.hosts.get(user_id)
+        if host and host.rpc.closed.is_set():
+            if user_id in self.active:
+                raise RuntimeError("Active DSH Host exited")
+            await self.release_host(user_id)
+            host = None
+        if host:
+            self.touch_host(user_id)
+            return host
+        # Bound the number of user containers. Only evict genuinely idle Hosts.
+        while len(self.hosts) >= self.settings.max_active_runs:
+            reclaimed = False
+            for other, candidate in sorted(
+                self.hosts.items(), key=lambda item: item[1].expires
+            ):
+                lock = self.host_locks.setdefault(other, asyncio.Lock())
+                if other in self.active or other in self.reading or lock.locked():
+                    continue
+                async with lock:
+                    if (
+                        candidate.rpc.closed.is_set()
+                        or not (await candidate.rpc.call("orchmesh/busy"))["busy"]
+                    ):
+                        await self.release_host(other)
+                        reclaimed = True
+                        break
+            if not reclaimed:
+                raise Busy("运行容量已满，请稍后再试")
+
+        def notify(record):
+            run = self.active.get(user_id)
+            if run:
+                run.accept(record)
+
+        rpc = RPC(
+            self.containers.command(user_id, None), notify, context_id=str(user_id)
+        )
+        host = UserHost(rpc, time.monotonic() + self.settings.runtime_idle_seconds)
+        self.hosts[user_id] = host
+        try:
             await rpc.start()
             await rpc.call("initialize")
-            return await rpc.call(method, **params)
-        finally:
-            cleanup_ok = False
-            try:
-                await self.containers.kill(user_id)
-                cleanup_ok = True
-            finally:
-                if rpc:
-                    await rpc.close()
-                if cleanup_ok:
-                    self.reading.discard(user_id)
+        except BaseException:
+            await self.release_host(user_id)
+            raise
+        if self.host_reaper is None:
+            self.host_reaper = asyncio.create_task(self.reap_hosts())
+        return host
+
+    async def release_host(self, user_id):
+        """Removal must succeed before another container can use this user's state."""
+        host = self.hosts.get(user_id)
+        if host:
+            await self.containers.kill(user_id)
+            await host.rpc.close()
+            self.hosts.pop(user_id, None)
+
+    async def reap_hosts(self):
+        while True:
+            await asyncio.sleep(min(15, self.settings.runtime_idle_seconds))
+            await self.expire_hosts()
+
+    async def expire_hosts(self):
+        for user_id in list(self.hosts):
+            async with self.host_locks.setdefault(user_id, asyncio.Lock()):
+                host = self.hosts.get(user_id)
+                if not host or user_id in self.active or user_id in self.reading:
+                    continue
+                if host.expires > time.monotonic():
+                    continue
+                try:
+                    if (
+                        host.rpc.closed.is_set()
+                        or not (await host.rpc.call("orchmesh/busy"))["busy"]
+                    ):
+                        await self.release_host(user_id)
+                    else:
+                        self.touch_host(user_id)
+                except Exception as exc:
+                    failure("runtime.cleanup_failure", exc)
 
     async def recover(self):
         # The process lock makes cleanup exclusive, including orphan history readers.
@@ -146,14 +262,6 @@ class Manager:
             )
             await session.commit()
 
-    async def command(self, user_id, conversation_id, *, control=False):
-        async with self.db.sessions() as session:
-            conversation = await session.get(Conversation, conversation_id)
-            project_id = conversation.directory_id if conversation else None
-        return self.containers.command(
-            user_id, conversation_id, project_id, control=control
-        )
-
     @serialized_host
     async def start(
         self,
@@ -167,6 +275,9 @@ class Manager:
             raise Busy("该用户已有任务正在运行")
         if len(self.active) + len(self.reading) >= self.settings.max_active_runs:
             raise Busy("运行容量已满，请稍后再试")
+        host = await self.get_host(user_id)
+        if (await host.rpc.call("orchmesh/busy"))["busy"]:
+            raise Busy("后台任务仍在运行，请等待结束后再发送")
         run = Execution(
             uuid.uuid4(),
             user_id,
@@ -174,6 +285,7 @@ class Manager:
             reasoning=reasoning,
             review_tools=review_tools,
         )
+        run.rpc = host.rpc
         self.active[user_id] = run
         try:
             async with self.db.sessions() as session:
@@ -188,6 +300,7 @@ class Manager:
     async def _execute(self, run: Execution, prompt: str):
         rpc = None
         stage = "start"
+        recycle = False
         logger.info(
             "run.start run_id=%s user_id=%s conversation_id=%s",
             run.id,
@@ -195,23 +308,14 @@ class Manager:
             run.conversation_id,
         )
         try:
-            rpc = RPC(
-                await self.command(run.user_id, run.conversation_id),
-                run.accept,
-                context_id=str(run.id),
-            )
-            run.rpc = rpc
-            await rpc.start()
-            stage = "initialize"
-            if run.reasoning == "default":
-                await rpc.call("initialize")
-            else:
-                await rpc.call("initialize", reasoningEffort=run.reasoning)
+            rpc = run.rpc
+            assert rpc is not None
             stage = "history"
             result = await rpc.call(
                 "orchmesh/open",
                 sessionId=str(run.conversation_id),
                 reviewTools=run.review_tools,
+                reasoningEffort=run.reasoning,
             )
             messages, _ = history(result["events"])
             run.projection = Messages(messages)
@@ -227,7 +331,7 @@ class Manager:
             while True:
                 admitted = run.admissions
                 await rpc.call(
-                    "session/wait",
+                    "orchmesh/wait",
                     timeout=self.settings.run_timeout,
                     sessionId=str(run.conversation_id),
                 )
@@ -256,8 +360,10 @@ class Manager:
             else:
                 run.status, run.error = "completed", None
         except asyncio.CancelledError:
+            recycle = True
             run.status = "stopped" if run.stopping else "interrupted"
         except Exception as exc:
+            recycle = True
             failure("run.failure", exc, run_id=run.id, stage=stage)
             run.status = "stopped" if run.stopping else "failed"
             run.error = (
@@ -267,10 +373,15 @@ class Manager:
             )
         finally:
             run.ready.set()
-            # Always remove the container: EOF alone may leave Shell descendants.
+            # Normal completion and cooperative stop keep the official Host alive.
+            # Timeout, transport failure or shutdown still tear down the entire tree.
             cleanup_ok = True
             try:
-                await self.containers.kill(run.user_id)
+                if recycle:
+                    async with self.host_locks.setdefault(run.user_id, asyncio.Lock()):
+                        await self.release_host(run.user_id)
+                else:
+                    self.touch_host(run.user_id)
             except Exception as exc:
                 failure("run.cleanup_failure", exc, run_id=run.id)
                 cleanup_ok = False
@@ -280,8 +391,6 @@ class Manager:
                     "请检查 Docker 后重启服务。"
                 )
             finally:
-                if rpc:
-                    await rpc.close()
                 async with self.db.sessions() as session:
                     await session.execute(
                         update(Run)
@@ -322,36 +431,19 @@ class Manager:
             if run.conversation_id != conversation_id:
                 raise Busy("请等待当前任务结束后再打开其他对话")
             return run.snapshot()
-        if user_id in self.reading:
-            raise Busy("正在读取历史，请稍后")
-        if len(self.active) + len(self.reading) >= self.settings.max_active_runs:
-            raise Busy("运行容量已满，请稍后再试")
-        self.reading.add(user_id)
-        rpc = RPC(
-            await self.command(user_id, conversation_id, control=True),
-            lambda _: None,
-            context_id=str(conversation_id),
+        data = await self._control(
+            user_id, "orchmesh/history", sessionId=str(conversation_id)
         )
-        try:
-            await rpc.start()
-            await rpc.call("initialize")
-            data = await rpc.call("orchmesh/history", sessionId=str(conversation_id))
-            messages, _ = history(data["events"])
-            return {
-                "messages": messages,
-                "read_only": data.get("archived", False),
-                "activity": data.get("activity"),
-                "status": "idle",
-                "run_id": None,
-                "cursor": 0,
-                "error": None,
-            }
-        finally:
-            try:
-                await self.containers.kill(user_id)
-            finally:
-                await rpc.close()
-                self.reading.discard(user_id)
+        messages, _ = history(data["events"])
+        return {
+            "messages": messages,
+            "read_only": data.get("archived", False),
+            "activity": data.get("activity"),
+            "status": "idle",
+            "run_id": None,
+            "cursor": 0,
+            "error": None,
+        }
 
     async def activity(
         self, user_id, conversation_id, method, *, mutate=False, **params
@@ -385,26 +477,22 @@ class Manager:
             if not run.ready.is_set() or not run.rpc or run.finished:
                 raise Busy("模型正在初始化，请稍后")
             return await run.rpc.call("orchmesh/model")
-        if (
-            user_id in self.reading
-            or len(self.active) + len(self.reading) >= self.settings.max_active_runs
-        ):
-            raise Busy("执行环境繁忙，请稍后")
-        self.reading.add(user_id)
-        rpc = RPC(self.containers.command(user_id, None), lambda _: None)
-        try:
-            await rpc.start()
-            await rpc.call("initialize")
-            return await rpc.call("orchmesh/model")
-        finally:
-            try:
-                await self.containers.kill(user_id)
-            finally:
-                await rpc.close()
-                self.reading.discard(user_id)
+        return await self._control(user_id, "orchmesh/model")
 
     async def close(self):
+        self.closing = True
+        warming = list(self.warming.values())
+        for task in warming:
+            task.cancel()
+        await asyncio.gather(*warming, return_exceptions=True)
+        if self.host_reaper:
+            self.host_reaper.cancel()
+            await asyncio.gather(self.host_reaper, return_exceptions=True)
+            self.host_reaper = None
         tasks = [run.task for run in self.active.values() if run.task]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        for user_id in list(self.hosts):
+            async with self.host_locks.setdefault(user_id, asyncio.Lock()):
+                await self.release_host(user_id)

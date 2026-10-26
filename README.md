@@ -131,6 +131,8 @@ uv run --directory apps/server orchmesh configure-model friend@example.com --bas
 
 管理员模型仍以 `.env` 为准，每次重启同步；管理员密码只在首次创建时使用。
 
+登录后后台预热该用户的 Docker 容器与 DSH Host，导航、历史和聊天共用；正常完成不会重启容器。`ORCHMESH_RUNTIME_IDLE_SECONDS` 默认 600 秒，空闲后自动回收，有活动任务或后台作业时保留。`ORCHMESH_MAX_ACTIVE_RUNS` 默认 4，同时限制常驻用户 Host 数量（包含预热/空闲实例），容量满时优先回收空闲实例。文件与历史独立挂载，回收不删除数据。
+
 ## 常用命令
 
 | 命令 | 用途 |

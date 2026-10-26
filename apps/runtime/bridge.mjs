@@ -5,6 +5,7 @@ import { JsonRpcLineTransport } from "@deepseek-ai/dsh-sdk-protocol";
 export const name = "orchmesh";
 export const inject = [
   "agents",
+  "jobs",
   "approval",
   "userQuestions",
   "subagents",
@@ -19,6 +20,15 @@ export const inject = [
 ];
 export function apply(ctx) {
   let selection;
+  const failures = new Map();
+  ctx.on("agent/error", ({ agent, error }) => {
+    failures.set(String(agent.id), { error, offset: agent.session.seq });
+  });
+  ctx.on("session/event", (session, event) => {
+    const failure = failures.get(String(session.id));
+    if (event.type === "turn/end" && failure && event.seq >= failure.offset)
+      failures.delete(String(session.id));
+  });
   const activity = interactions(ctx);
   const transport = new JsonRpcLineTransport(process.stdin, process.stdout);
   const server = new HarnessSdkJsonRpcServer(ctx, transport, {
@@ -47,6 +57,33 @@ export function apply(ctx) {
           : {}),
       };
     }
+    if (method === "orchmesh/busy") {
+      // Same public state used by the official desktop quit/update inspector.
+      const agents = ctx.agents.list();
+      let busy =
+        agents.some(
+          (agent) =>
+            agent.status === "running" ||
+            agent.inbox.nextTurn.length ||
+            agent.inbox.nextStep.length,
+        ) ||
+        [undefined, ...agents].some((agent) =>
+          ctx.jobs
+            .list(agent?.id)
+            .some(
+              (job) => job.status === "running" || job.status === "stopping",
+            ),
+        );
+      for (const agent of agents) {
+        const activity = await ctx.waterfall(
+          "workspace/session-activity",
+          { sessionId: agent.id },
+          () => Promise.resolve([]),
+        );
+        if (activity.some((entry) => entry.kind === "schedule")) busy = true;
+      }
+      return { busy };
+    }
     if (method === "orchmesh/model") {
       const info = await ctx.llm.resolveModelInfo(
         "project-api",
@@ -58,40 +95,23 @@ export function apply(ctx) {
         defaultEffort: info.reasoning?.defaultEffort ?? null,
       };
     }
-    if (
-      process.env.ORCHMESH_CONTROL_ONLY &&
-      ![
-        "initialize",
-        "navigation/list",
-        "navigation/update",
-        "project/create",
-        "project/rename",
-        "session/create",
-        "orchmesh/history",
-        "activity/read",
-        "activity/child-history",
-        "session/rename",
-        "session/fork",
-        "project/delete",
-        "workspace/attach",
-        "shutdown",
-      ].includes(method)
-    )
-      throw new Error("Control host does not execute sessions");
     if (method.startsWith("activity/")) return activity.handle(method, params);
     if (method === "orchmesh/open") {
-      const saved = await ctx.sessionPersistence.stat(params.sessionId);
-      if (!ctx.agents.get(params.sessionId)) {
-        if (saved) await server.resume(params);
-        else
-          await server.handleRequest("session/working-directory/get", params);
-      }
+      const resolved = await ctx.sessionController.resolveAgent(
+        params.sessionId,
+      );
+      if (resolved.error) throw resolved.error;
       activity.configure(params.reviewTools ?? false);
-      if (params.reviewTools)
-        setApprovalPolicy(ctx.sessions.get(params.sessionId), "ask");
+      setApprovalPolicy(
+        ctx.sessions.get(params.sessionId),
+        params.reviewTools ? "ask" : "never",
+      );
+      const { reasoningEffort: initialEffort, ...model } = selection;
+      const effort = params.reasoningEffort ?? initialEffort;
       await ctx.sessionController.selectModel({
         sessionId: params.sessionId,
-        ...selection,
+        ...model,
+        ...(effort && effort !== "default" ? { reasoningEffort: effort } : {}),
       });
       return {
         events: (await ctx.sessionController.inspect(params.sessionId)).events,
@@ -105,6 +125,26 @@ export function apply(ctx) {
           params.sessionId,
         ),
       };
+    }
+    if (method === "orchmesh/wait") {
+      // SDK session/wait only accepts sessions owned by that SDK server.
+      // Controller owns our sessions; use the same public Agent/Subagent wait
+      // primitives as the SDK, without adopting its private session registry.
+      const agent = ctx.agents.get(params.sessionId);
+      if (!agent) throw new Error("Session is not active");
+      while (true) {
+        await agent.whenIdle();
+        const seq = agent.session.seq;
+        const children = await ctx.subagents.waitForChildren(agent);
+        if (ctx.agents.get(params.sessionId) !== agent)
+          throw new Error("Session was disposed while waiting");
+        if (!children && agent.status === "idle" && agent.session.seq === seq) {
+          const failure = failures.get(String(agent.id));
+          if (failure) throw failure.error;
+          await ctx.sessions.flush(agent.session);
+          return {};
+        }
+      }
     }
     if (method === "session/prompt") {
       return ctx.sessionController.prompt(
@@ -203,7 +243,19 @@ export function apply(ctx) {
     }
     if (method === "orchmesh/stop") {
       // The product's Stop means stop the whole submitted task, including its inbox.
-      ctx.agents.get(params.sessionId)?.cancel({ kind: "user" });
+      const agent = ctx.agents.get(params.sessionId);
+      if (!agent) return {};
+      agent.cancel({ kind: "user" });
+      await agent.whenIdle();
+      const descendants = await ctx.subagents.listDescendants(agent.id);
+      const children = await ctx.subagents.listChildren(agent.id);
+      await ctx.subagents.drainChildren(agent, children.map((child) => child.id));
+      for (const owner of [agent.id, ...descendants.map((child) => child.id)]) {
+        for (const job of ctx.jobs.list(owner)) {
+          if (job.owner === owner && ["running", "stopping"].includes(job.status))
+            ctx.jobs.kill(job.id, owner, "user stopped task");
+        }
+      }
       return {};
     }
     const result = await server.handleRequest(method, params);

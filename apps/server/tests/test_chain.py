@@ -316,6 +316,14 @@ async def test_cleanup_failure_overrides_stop_and_retains_capacity(app, monkeypa
         run = next(iter(app.state.manager.active.values()))
         await asyncio.wait_for(run.ready.wait(), 3)
         monkeypatch.setattr(app.state.manager.containers, "kill", fail_cleanup)
+        original = run.rpc.call
+
+        async def failed_stop(method, **params):
+            if method == "orchmesh/stop":
+                raise TimeoutError
+            return await original(method, **params)
+
+        monkeypatch.setattr(run.rpc, "call", failed_stop)
         await client.post(url + "/stop")
         assert run.finished
         assert run.snapshot()["status"] == "interrupted"
@@ -323,3 +331,4 @@ async def test_cleanup_failure_overrides_stop_and_retains_capacity(app, monkeypa
         assert (
             await client.post(url + "/runs", json={"text": "again"})
         ).status_code == 409
+        monkeypatch.undo()

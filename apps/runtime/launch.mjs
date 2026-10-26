@@ -4,27 +4,22 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 const config = process.env.ORCHMESH_CONFIG_DIR ?? "/state/config";
 try {
-  const controlOnly = Boolean(process.env.ORCHMESH_CONTROL_ONLY);
   function readConfig(name) {
     try {
       return JSON.parse(readFileSync(`${config}/${name}.json`, "utf8"));
     } catch (error) {
-      if (controlOnly && error.code === "ENOENT") return {};
+      if (error.code === "ENOENT") return {};
       throw error;
     }
   }
   const defaults = readConfig("settings");
   const models = readConfig("models");
   // Metadata operations never make model requests; allow setup before credentials.
-  defaults.defaultModel ??= controlOnly ? "unconfigured" : undefined;
-  const provider =
-    models.providers?.[defaults.defaultProvider] ??
-    (controlOnly
-      ? {
-          baseUrl: "http://127.0.0.1:1/v1",
-          apiKey: "unconfigured",
-        }
-      : undefined);
+  defaults.defaultModel ??= "unconfigured";
+  const provider = models.providers?.[defaults.defaultProvider] ?? {
+    baseUrl: "http://127.0.0.1:1/v1",
+    apiKey: "unconfigured",
+  };
   if (!provider?.baseUrl || !provider?.apiKey || !defaults.defaultModel)
     throw new Error("Configure a model endpoint, API key and model first");
   const env = {

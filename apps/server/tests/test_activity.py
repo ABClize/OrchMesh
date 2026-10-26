@@ -69,18 +69,18 @@ async def test_send_waits_for_inflight_metadata_host(app, monkeypatch):
         cid = (await one.post("/api/conversations")).json()["id"]
         url = f"/api/conversations/{cid}"
         entered, release = asyncio.Event(), asyncio.Event()
-        original = RPC.start
+        original = RPC.call
         first = True
 
-        async def delayed_start(self):
+        async def delayed_call(self, method, **params):
             nonlocal first
-            if first:
+            if first and method == "orchmesh/history":
                 first = False
                 entered.set()
                 await release.wait()
-            await original(self)
+            return await original(self, method, **params)
 
-        monkeypatch.setattr(RPC, "start", delayed_start)
+        monkeypatch.setattr(RPC, "call", delayed_call)
         read = asyncio.create_task(one.get(url))
         await asyncio.wait_for(entered.wait(), 2)
         send = asyncio.create_task(one.post(url + "/runs", json={"text": "Hello"}))

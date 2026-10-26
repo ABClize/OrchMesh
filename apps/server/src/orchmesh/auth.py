@@ -26,7 +26,7 @@ class Token(BaseModel):
 
 
 class Auth:
-    def __init__(self, db: Database, settings: Settings):
+    def __init__(self, db: Database, settings: Settings, on_login=None):
         self.db = db
         self.secret = settings.secret()
         self.limiter = MovingWindowRateLimiter(MemoryStorage())
@@ -70,6 +70,8 @@ class Auth:
             if updated:
                 user.hashed_password = updated
                 await session.commit()
+            if on_login is not None:
+                on_login(user.id)
             response.headers["Cache-Control"] = "no-store"
             return Token(
                 access_token=create_access_token(

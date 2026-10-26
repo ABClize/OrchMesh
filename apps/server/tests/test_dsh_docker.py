@@ -180,6 +180,7 @@ async def test_dsh_tools_stream_stop_and_restore(tmp_path):
     try:
         await rpc.start()
         await rpc.call("initialize", reasoningEffort="off")
+        await rpc.call("session/create", sessionId=str(cid))
         capabilities = await rpc.call("orchmesh/model")
         assert {e["id"] for e in capabilities["efforts"]} == {"off", "high"}
         await rpc.call("orchmesh/open", sessionId=str(cid))
@@ -190,7 +191,7 @@ async def test_dsh_tools_stream_stop_and_restore(tmp_path):
                 {"type": "text", "text": "Use bash to write and read proof.txt."}
             ],
         )
-        await rpc.call("session/wait", sessionId=str(cid), timeout=45)
+        await rpc.call("orchmesh/wait", sessionId=str(cid), timeout=45)
         assert "bash" in Model.tool_names, Model.tool_names
         assert "present" in Model.tool_names
         assert "present_files" not in Model.tool_names
@@ -238,7 +239,7 @@ async def test_dsh_tools_stream_stop_and_restore(tmp_path):
                 break
             await asyncio.sleep(0.05)
         waiting = asyncio.create_task(
-            rpc.call("session/wait", sessionId=str(cid), timeout=10)
+            rpc.call("orchmesh/wait", sessionId=str(cid), timeout=10)
         )
         await rpc.call("orchmesh/stop", sessionId=str(cid))
         await waiting
@@ -265,7 +266,7 @@ async def test_dsh_tools_stream_stop_and_restore(tmp_path):
             sessionId=str(cid),
             contentBlocks=[{"type": "text", "text": "High."}],
         )
-        await rpc.call("session/wait", sessionId=str(cid), timeout=15)
+        await rpc.call("orchmesh/wait", sessionId=str(cid), timeout=15)
         assert Model.requests[-1]["thinking"] == {"type": "enabled"}
         assert Model.requests[-1]["reasoning_effort"] == "high"
         await rpc.call("shutdown")
@@ -280,7 +281,7 @@ async def test_dsh_tools_stream_stop_and_restore(tmp_path):
             sessionId=str(cid),
             contentBlocks=[{"type": "text", "text": "Default."}],
         )
-        await rpc.call("session/wait", sessionId=str(cid), timeout=15)
+        await rpc.call("orchmesh/wait", sessionId=str(cid), timeout=15)
         assert Model.requests[-1].get("reasoning_effort") is None
     finally:
         await containers.kill(uid)
@@ -343,13 +344,11 @@ async def test_native_navigation_survives_hosts_and_keeps_workspace_identity(tmp
     workspace = next(w for w in nav["workspaces"] if w["id"] == wid)
     assert workspace["title"] == "Renamed native"
     assert str(cid) in workspace["sessionIds"]
-    assert workspace["path"] == f"/workspaces/{pid}"
+    assert workspace["path"] == f"/project-workspaces/{pid}/work"
     summary = next(s for s in nav["sessions"]["items"] if s["sessionId"] == str(cid))
     assert summary["projections"]["values"]["title"] == "Imported title"
     assert str(cid) not in nav["archived"]
     assert (root / "kept.txt").read_text() == "unchanged"
-    with pytest.raises(RuntimeError):
-        await invoke("session/prompt", sessionId=str(cid), contentBlocks=[])
 
 
 async def test_control_navigation_needs_no_model_credentials(tmp_path):
@@ -363,8 +362,6 @@ async def test_control_navigation_needs_no_model_credentials(tmp_path):
         await rpc.call("session/create", sessionId=str(cid))
         nav = await rpc.call("navigation/list")
         assert any(s["sessionId"] == str(cid) for s in nav["sessions"]["items"])
-        with pytest.raises(RuntimeError):
-            await rpc.call("session/prompt", sessionId=str(cid), contentBlocks=[])
     finally:
         await containers.kill(uid)
         await rpc.close()
@@ -410,6 +407,7 @@ async def test_official_approval_questions_and_queue(tmp_path, outcome):
     try:
         await rpc.start()
         await rpc.call("initialize")
+        await rpc.call("session/create", sessionId=cid)
         await rpc.call("orchmesh/open", sessionId=cid, reviewTools=True)
         await rpc.call(
             "session/prompt",
@@ -462,7 +460,7 @@ async def test_official_approval_questions_and_queue(tmp_path, outcome):
             requestId=question["id"],
             answers=[{"id": "language", "selected": ["Chinese"]}],
         )
-        await rpc.call("session/wait", sessionId=cid, timeout=30)
+        await rpc.call("orchmesh/wait", sessionId=cid, timeout=30)
         assert (containers.user_dir(uid) / "work/approved.txt").exists() == (
             outcome == "allowed-once"
         )
@@ -476,7 +474,7 @@ async def test_official_approval_questions_and_queue(tmp_path, outcome):
         )
         withdrawn = await request("approval")
         await rpc.call("orchmesh/stop", sessionId=cid)
-        await rpc.call("session/wait", sessionId=cid)
+        await rpc.call("orchmesh/wait", sessionId=cid)
         assert not (await rpc.call("activity/read", sessionId=cid))["requests"]
         with pytest.raises(RuntimeError):
             await rpc.call(
@@ -488,5 +486,82 @@ async def test_official_approval_questions_and_queue(tmp_path, outcome):
     finally:
         await containers.kill(uid)
         await rpc.close()
+        model.shutdown()
+        model.server_close()
+
+
+async def test_reusable_user_host_across_projects_turns_and_reclamation(app):
+    from contextlib import aclosing
+
+    from conftest import authenticated
+
+    gateway = subprocess.check_output(
+        [
+            "docker",
+            "network",
+            "inspect",
+            "bridge",
+            "--format",
+            "{{(index .IPAM.Config 0).Gateway}}",
+        ],
+        text=True,
+    ).strip()
+    model = ThreadingHTTPServer((gateway, 0), Model)
+    threading.Thread(target=model.serve_forever, daemon=True).start()
+    Model.calls, Model.mode = 0, "tools"
+    Model.requests = []
+    manager = app.state.manager
+    settings = manager.settings
+    settings.model_base_url = f"http://{gateway}:{model.server_port}/v1"
+    from pydantic import SecretStr
+
+    settings.model_api_key = SecretStr("test-only")
+    settings.model_id = "fixture"
+    manager.containers = Containers(settings)
+    client = await authenticated(app)
+    try:
+        async with aclosing(client):
+            uid = uuid.UUID((await client.get("/api/me")).json()["id"])
+            sync_model(settings, uid)
+            assert (await client.get("/api/projects")).status_code == 200
+            host = manager.hosts[uid]
+            project = (
+                await client.post("/api/projects", json={"name": "Warm project"})
+            ).json()
+            assert manager.hosts[uid] is host
+            cid = (
+                await client.post(
+                    "/api/conversations", json={"project_id": project["id"]}
+                )
+            ).json()["id"]
+            url = "/api/conversations/" + cid
+            for _ in range(2):
+                assert (
+                    await client.post(url + "/runs", json={"text": "Test tools"})
+                ).status_code == 202
+                run = manager.active[uid]
+                await asyncio.wait_for(asyncio.shield(run.task), 60)
+                assert run.status == "completed", run.error
+                assert manager.hosts[uid] is host
+            assert (
+                manager.containers.user_dir(uid)
+                / "projects"
+                / project["id"]
+                / "work/proof.txt"
+            ).read_text() == "DSH proof"
+            assert not (manager.containers.user_dir(uid) / "work/proof.txt").exists()
+            assert (await client.get(url)).status_code == 200
+            assert manager.hosts[uid] is host
+            host.expires = 0
+            await manager.expire_hosts()
+            assert uid not in manager.hosts
+            result = await client.get(url)
+            assert result.status_code == 200
+            assert (
+                len([m for m in result.json()["messages"] if m["role"] == "user"]) == 2
+            )
+            assert manager.hosts[uid] is not host
+    finally:
+        await manager.close()
         model.shutdown()
         model.server_close()

@@ -36,7 +36,7 @@ Run `uv run --directory apps/server pytest -q`, frontend `npm --prefix apps/web 
 
 ## Runtime & Contributions
 
-Use the official-template Bearer JWT flow for API and SSE; follow `README.md` for token lifetime and logout semantics. Preserve per-user container mounts and the single-instance lock. Keep credentials and runtime data outside tracked files. Database foreign-key enforcement is intentionally disabled; enforce ownership and lifecycle rules in the application. For logging changes, follow `docs/development/logging.md`. Use DSH `session/wait` for completion and Agent.cancel for stopping; keep SDK internals upstream. Use official Workspace/Session Controllers for navigation and execution; preserve existing file references. Keep unsupported UI actions hidden.
+Use the official-template Bearer JWT flow for API and SSE; follow `README.md` for token lifetime and logout semantics. Preserve per-user container mounts and the single-instance lock. Keep credentials and runtime data outside tracked files. Database foreign-key enforcement is intentionally disabled; enforce ownership and lifecycle rules in the application. For logging changes, follow `docs/development/logging.md`. Keep Controller-owned sessions on public Agent/Subagent completion APIs; see `docs/architecture/dsh-runtime.md` for ownership and stopping semantics. Use official Workspace/Session Controllers for navigation and execution; preserve existing file references. Keep unsupported UI actions hidden.
 
 Use Conventional Commits, following the existing `feat:` history. PRs should explain behavior, link relevant issues or design decisions, state validation and remaining limitations, and include screenshots for UI changes.
 

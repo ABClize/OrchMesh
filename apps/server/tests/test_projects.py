@@ -25,7 +25,6 @@ async def test_project_ownership_workspace_and_runtime_mount(app):
             await two.get("/api/workspace/entries", params={"project_id": pid})
         ).status_code == 404
         created = await one.post("/api/conversations", json={"project_id": pid})
-        cid = created.json()["id"]
         assert created.json()["project_id"] == pid
         settings = app.state.manager.settings
         work = workspace_path(settings, uid, uuid.UUID(pid))
@@ -41,14 +40,15 @@ async def test_project_ownership_workspace_and_runtime_mount(app):
                     "/api/workspace/file", params={**scope, "path": "proof.txt"}
                 )
             ).status_code == 404
-        # The production command must mount only this project's work directory.
+        # The production Host sees only this user's tree, with stable aliases.
         production = Containers(settings)
-        command = production.command(uid, cid, uuid.UUID(pid))
-        assert f"type=bind,src={work},dst=/workspace" in command
+        command = production.command(uid)
+        assert f"type=bind,src={work.parent.parent},dst=/project-workspaces" in command
         assert (
-            f"type=bind,src={workspace_path(settings, uid)},dst=/workspace"
-            not in command
+            f"type=bind,src={production.user_dir(uid) / 'workspace-mounts'}"
+            ",dst=/workspaces,readonly" in command
         )
+        assert (production.user_dir(uid) / "workspace-mounts" / pid).is_symlink()
         assert (await one.post("/api/projects", json={"name": "  "})).status_code == 422
 
 

@@ -94,8 +94,10 @@ export function deliveredFiles(
       return value.files.flatMap(
         (file: { path?: unknown; description?: unknown }) => {
           if (typeof file.path !== "string") return [];
+          const projectId = useFiles.getState().projectId;
           const prefix = [
-            `/workspaces/${useFiles.getState().projectId ?? "default"}/`,
+            ...(projectId ? [`/project-workspaces/${projectId}/work/`] : []),
+            `/workspaces/${projectId ?? "default"}/`,
             "/workspace/",
           ].find((root) => (file.path as string).startsWith(root));
           if (!prefix) return [];

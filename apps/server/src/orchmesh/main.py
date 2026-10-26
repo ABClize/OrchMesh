@@ -80,8 +80,8 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
     settings = settings or Settings()
     settings.secret()
     db = Database(settings)
-    auth = Auth(db, settings)
     manager = Manager(db, settings, containers)
+    auth = Auth(db, settings, on_login=manager.prewarm)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -157,6 +157,7 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
 
     @app.get("/api/me", response_model=UserRead)
     async def me(user: Annotated[User, Depends(auth.current_user)]):
+        manager.prewarm(user.id)
         return user
 
     @app.get("/api/conversations", response_model=list[ConversationRead])

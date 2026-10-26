@@ -87,8 +87,10 @@ export function Navigation({
       return result.data;
     },
     onSuccess: async (project, variables) => {
-      await query.invalidateQueries({ queryKey: ["projects"] });
-      await query.invalidateQueries({ queryKey: ["conversations"] });
+      await Promise.all([
+        query.invalidateQueries({ queryKey: ["projects"] }),
+        query.invalidateQueries({ queryKey: ["conversations"] }),
+      ]);
       setEditing(null);
       if (variables.project === "new") {
         setArchived(false);
@@ -130,9 +132,20 @@ export function Navigation({
       return project;
     },
     onSuccess: async (project) => {
-      await query.invalidateQueries({ queryKey: ["projects"] });
-      await query.invalidateQueries({ queryKey: ["conversations"] });
+      // Apply a confirmed removal immediately; then reconcile with DSH.
+      query.setQueryData<Project[]>(["projects"], (rows) =>
+        rows?.filter((row) => row.id !== project.id),
+      );
+      query.setQueryData<Conversation[]>(["conversations"], (rows) =>
+        rows?.map((row) =>
+          row.project_id === project.id ? { ...row, project_id: null } : row,
+        ),
+      );
       if (projectId === project.id) onProject(null);
+      await Promise.all([
+        query.invalidateQueries({ queryKey: ["projects"] }),
+        query.invalidateQueries({ queryKey: ["conversations"] }),
+      ]);
     },
   });
   const fork = useMutation({
@@ -179,8 +192,19 @@ export function Navigation({
       </div>
       <nav
         aria-label="项目列表"
+        aria-busy={projects.isPending || removeProject.isPending}
         className="flex max-h-48 shrink-0 flex-col gap-1 overflow-auto"
       >
+        {projects.isPending && (
+          <p role="status" className="px-2 py-2 text-sm text-muted-foreground">
+            正在加载项目…
+          </p>
+        )}
+        {removeProject.isPending && (
+          <p role="status" className="px-2 py-2 text-sm text-muted-foreground">
+            正在移除项目…
+          </p>
+        )}
         <Button
           variant={projectId === null ? "secondary" : "ghost"}
           className="justify-start"

@@ -152,11 +152,17 @@ test("stable project paths only resolve inside the active execution workspace", 
         kind: "dsh.deliverables",
         files: [
           { path: "/workspaces/original/report.md" },
+          { path: "/project-workspaces/original/work/canonical.md" },
+          { path: "/project-workspaces/other/work/report.md" },
+          { path: "/project-workspaces/original/work/../secret" },
           { path: "/workspaces/other/report.md" },
           { path: "/workspaces/original/../other/report.md" },
         ],
       }),
     ),
-  ).toEqual([{ path: "report.md", name: "report.md" }]);
+  ).toEqual([
+    { path: "report.md", name: "report.md" },
+    { path: "canonical.md", name: "canonical.md" },
+  ]);
   useFiles.getState().reset();
 });

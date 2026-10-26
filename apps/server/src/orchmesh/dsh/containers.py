@@ -4,7 +4,6 @@ import uuid
 from pathlib import Path
 
 from ..config import Settings
-from ..projects import workspace_path
 
 
 class Containers:
@@ -24,18 +23,43 @@ class Containers:
     def name(user_id: uuid.UUID) -> str:
         return f"orchmesh-user-{user_id}"
 
+    def prepare_workspaces(self, user_id):
+        """Keep historical container paths stable without moving user files."""
+        root = self.prepare(user_id)
+        projects, aliases = root / "projects", root / "workspace-mounts"
+        projects.mkdir(exist_ok=True, mode=0o700)
+        aliases.mkdir(exist_ok=True, mode=0o700)
+        targets = {"default": "/workspace"}
+        for project in projects.iterdir():
+            if project.is_symlink() or not project.is_dir():
+                continue
+            try:
+                uuid.UUID(project.name)
+            except ValueError:
+                continue
+            work = project / "work"
+            if work.is_dir() and not work.is_symlink():
+                targets[project.name] = f"/project-workspaces/{project.name}/work"
+        for name, target in targets.items():
+            link = aliases / name
+            if link.is_symlink() and os.readlink(link) == target:
+                continue
+            if link.exists() or link.is_symlink():
+                raise RuntimeError("Unexpected workspace mapping")
+            link.symlink_to(target)
+        return root
+
     def command(
         self,
         user_id: uuid.UUID,
-        conversation_id: str | None,
+        conversation_id: str | None = None,
         project_id: uuid.UUID | None = None,
         *,
         control: bool = False,
     ) -> list[str]:
-        control = control or conversation_id is None
-        root = self.prepare(user_id)
-        work = workspace_path(self.settings, user_id, project_id)
-        work.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # A user owns one Host, independent of the selected conversation/project.
+        # Keep optional arguments for direct SDK test callers; they do not scope mounts.
+        root = self.prepare_workspaces(user_id)
         command = [
             "docker",
             "run",
@@ -56,44 +80,22 @@ class Containers:
             "--memory=1g",
             "--cpus=1",
             "--pids-limit=128",
-            "--mount",
-            f"type=bind,src={work},dst=/workspace" + (",readonly" if control else ""),
-            "--mount",
-            f"type=bind,src={root / 'config'},dst=/state/config",
-            "--mount",
-            f"type=bind,src={root / 'dsh'},dst=/state/dsh",
         ]
-        if conversation_id is None:
-            # Control-only host: read-only filesystem views, never accepts prompts.
-            mounts = [(root / "work", "default")]
-            projects = root / "projects"
-            if projects.exists():
-                mounts.extend(
-                    (p / "work", p.name)
-                    for p in projects.iterdir()
-                    if not p.is_symlink()
-                    and p.is_dir()
-                    and not (p / "work").is_symlink()
-                    and (p / "work").is_dir()
-                )
-            for path, key in mounts:
-                command.extend(
-                    ["--mount", f"type=bind,src={path},dst=/workspaces/{key},readonly"]
-                )
-        else:
-            directory = f"/workspaces/{project_id or 'default'}"
+        for source, target, readonly in [
+            (root / "work", "/workspace", False),
+            (root / "projects", "/project-workspaces", False),
+            (root / "workspace-mounts", "/workspaces", True),
+            (root / "config", "/state/config", True),
+            (root / "dsh", "/state/dsh", False),
+        ]:
             command.extend(
                 [
                     "--mount",
-                    f"type=bind,src={work},dst={directory}"
-                    + (",readonly" if control else ""),
-                    "--workdir",
-                    directory,
+                    f"type=bind,src={source},dst={target}"
+                    + (",readonly" if readonly else ""),
                 ]
             )
-        if control:
-            command.extend(["--env", "ORCHMESH_CONTROL_ONLY=1"])
-        return [*command, self.settings.dsh_image]
+        return [*command, "--workdir", "/workspaces/default", self.settings.dsh_image]
 
     async def kill(self, user_id: uuid.UUID):
         # Kill the whole container, including detached Shell descendants.

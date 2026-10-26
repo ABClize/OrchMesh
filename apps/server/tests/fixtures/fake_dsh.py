@@ -118,6 +118,8 @@ for line in sys.stdin:
     kind, params = command["method"], command.get("params", {})
     if kind == "initialize":
         response(command)
+    elif kind == "orchmesh/busy":
+        response(command, {"busy": bool(worker and worker.is_alive())})
     elif kind == "navigation/list":
         response(command, navigation())
     elif kind in ("project/create", "project/rename"):
@@ -184,7 +186,10 @@ for line in sys.stdin:
         for w in nav["workspaces"]:
             if params["sessionId"] in w["sessionIds"]:
                 w["sessionIds"].append(sid)
-        (path.parent / f"{sid}.jsonl").write_text(json.dumps(events))
+        source_path = path.parent / (params["sessionId"] + ".jsonl")
+        (path.parent / f"{sid}.jsonl").write_text(
+            source_path.read_text() if source_path.exists() else "[]"
+        )
         save_navigation(nav)
         response(command, {"sessionId": sid})
     elif kind == "navigation/update":
@@ -201,6 +206,8 @@ for line in sys.stdin:
         response(command, {key: sid in nav[key] for key in ("pinned", "archived")})
     elif kind in ("orchmesh/open", "orchmesh/history"):
         session_id = params["sessionId"]
+        path = path.parent / f"{session_id}.jsonl"
+        events = json.loads(path.read_text()) if path.exists() else []
         response(
             command,
             {"events": events, "archived": session_id in navigation()["archived"]},
@@ -214,7 +221,7 @@ for line in sys.stdin:
             worker = threading.Thread(target=generate, args=(text,), daemon=True)
             worker.start()
         response(command, {"messageId": "test"})
-    elif kind == "session/wait":
+    elif kind in ("session/wait", "orchmesh/wait"):
 
         def wait(cmd=command):
             if worker:
