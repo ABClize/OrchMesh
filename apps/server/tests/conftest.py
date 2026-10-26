@@ -7,20 +7,20 @@ import pytest
 
 from orchmesh.accounts import UserCreate, create_account
 from orchmesh.config import Settings
+from orchmesh.dsh.containers import Containers
 from orchmesh.main import create_app
-from orchmesh.pi.containers import Containers
 from orchmesh.storage import Base
 
 PASSWORD = "test-password-only-123"
 
 
 class FakeContainers(Containers):
-    def command(self, user_id, conversation_id):
+    def command(self, user_id, conversation_id, project_id=None, *, control=False):
         root = self.prepare(user_id)
         return [
             sys.executable,
-            str(Path(__file__).parent / "fixtures/fake_pi.py"),
-            str(root / "sessions" / f"{conversation_id}.jsonl"),
+            str(Path(__file__).parent / "fixtures/fake_dsh.py"),
+            str(root / "dsh" / f"{conversation_id}.jsonl"),
         ]
 
     async def kill(self, user_id):

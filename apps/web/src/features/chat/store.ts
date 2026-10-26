@@ -27,6 +27,7 @@ export type Snapshot = {
   status: string;
   run_id: string | null;
   cursor: number;
+  read_only?: boolean;
   error?: string | null;
 };
 type PiEvent = {
@@ -57,6 +58,7 @@ const empty = {
   cursor: 0,
   error: null,
   current: null,
+  read_only: false,
 } satisfies Snapshot & { current: null };
 
 export const useChat = create<State>((set) => ({
@@ -77,7 +79,17 @@ export const useChat = create<State>((set) => ({
       if (state.current !== null)
         messages[state.current] = structuredClone(messages[state.current]);
       let current = state.current;
-      if (event.type === "message_start" && event.message) {
+      if (event.type === "tool_execution_end" && event.result) {
+        const index = messages.findIndex(
+          (m) => m.role === "toolResult" && m.toolCallId === event.toolCallId,
+        );
+        if (index >= 0)
+          messages[index] = {
+            ...messages[index],
+            content: event.result.content,
+            isError: event.isError,
+          };
+      } else if (event.type === "message_start" && event.message) {
         messages.push(event.message);
         current = messages.length - 1;
       } else if (event.type === "message_end" && event.message) {
@@ -116,8 +128,8 @@ export const useChat = create<State>((set) => ({
     }),
 }));
 
-// Pi 1.4 RPC sends deltas, unlike the SDK events expected by the upstream
-// reducer. Keep that transport adapter above; delegate UI projection upstream.
+// The presentation envelope stays compatible with the existing Pi projector.
+// DSH normalization happens on the server; this package renders legacy history too.
 export function toThreadMessages(messages: PiMessage[], status = "idle") {
   return projectPiThreadMessages({
     messages: messages as PiAgentMessage[],

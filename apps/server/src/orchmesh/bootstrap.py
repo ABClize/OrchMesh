@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from .accounts import UserCreate, create_account, find_user
 from .config import Settings
-from .pi.configuration import sync_model, validate_model
+from .dsh.configuration import sync_model, validate_model
 from .storage import Database, User
 
 

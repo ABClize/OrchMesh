@@ -24,6 +24,7 @@ import {
 } from "@/components/assistant-ui/elements/tool-group.aui";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
+import { ThinkingLoader } from "@/components/ui/thinking-loader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
@@ -198,8 +199,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
         ["--thread-max-width" as string]: "44rem",
-        ["--composer-bg" as string]:
-          "color-mix(in oklab, var(--color-muted) 30%, transparent)",
+        ["--composer-bg" as string]: "var(--card)",
         ["--composer-radius" as string]: "1rem",
         ["--composer-padding" as string]: "8px",
       }}
@@ -243,7 +243,11 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <Composer autoFocus={autoFocus} />
-            <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
+            <AuiIf
+              condition={(s) =>
+                isNewChatView(s) && s.composer.isEmpty && !s.composer.submission
+              }
+            >
               <ThreadSuggestions />
             </AuiIf>
           </ThreadPrimitive.ViewportFooter>
@@ -461,7 +465,7 @@ const ThreadWelcome: FC = () => {
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-col">
+    <div className="aui-thread-welcome-suggestions flex w-full flex-wrap justify-center gap-2">
       <ThreadPrimitive.Suggestions>
         {() => <ThreadSuggestionItem />}
       </ThreadPrimitive.Suggestions>
@@ -472,7 +476,7 @@ const ThreadSuggestions: FC = () => {
 const ThreadSuggestionItem: FC = () => {
   return (
     <div className="aui-thread-welcome-suggestion-display fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-200">
-      <SuggestionPrimitive.Trigger send asChild>
+      <SuggestionPrimitive.Trigger asChild>
         <button
           type="button"
           className="aui-thread-welcome-suggestion group hover:bg-foreground/[0.03] focus-visible:ring-ring/50 flex w-full items-baseline gap-2.5 rounded-md px-2 py-2 text-start text-sm transition-colors outline-none focus-visible:ring-1 motion-reduce:transition-none"
@@ -503,8 +507,8 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
         >
           <ComposerAttachments />
           <ComposerPrimitive.Input
-            placeholder="输入消息，让 Pi 开始工作…"
-            className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none"
+            placeholder="输入消息，让 DSH 开始工作…"
+            className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-16 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none"
             rows={1}
             autoFocus={autoFocus}
             enterKeyHint="send"
@@ -527,6 +531,9 @@ const ComposerAction: FC = () => {
 
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-end">
+      <span className="mr-auto px-2.5 text-xs text-muted-foreground">
+        DSH · 工作空间助手
+      </span>
       <AuiIf condition={(s) => s.thread.capabilities.attachments}>
         <ComposerAddAttachment />
       </AuiIf>
@@ -720,13 +727,12 @@ const AssistantMessage: FC = () => {
                 );
               case "indicator":
                 return (
-                  <span
-                    data-slot="aui_assistant-message-indicator"
-                    className="animate-pulse font-sans"
-                    aria-label="Assistant is working"
-                  >
-                    {"●"}
-                  </span>
+                  <ThinkingLoader
+                    phases={["DSH 正在处理"]}
+                    phase={0}
+                    size="sm"
+                    variant="plain"
+                  />
                 );
               default:
                 return null;

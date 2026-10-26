@@ -131,3 +131,116 @@ SSE 使用 256 条有界事件队列，首次连接或重连发送当前快照�
   code. Runtime logs contain lifecycle states without the test prompt, tool
   output or configured credentials. Screenshot stays in ignored local data:
   `.data/acceptance/framework-reuse.png`.
+
+## 2026-10-26：修复主动停止附带模型失败错误
+
+- 根因在 `Manager._execute` 的终态归并：状态优先检查 `run.stopping`，但
+  `run.error` 独立根据 Pi 最后一条消息的 `stopReason == "error"` 写入。
+  真实 provider 在中断时可能返回该标记，导致 SSE 同时发布
+  `status=stopped` 与模型失败错误；前端按既有规则优先显示 error。
+- 最小回归测试在修复前稳定失败（0.47s）：终态为 stopped，但 error 非空。
+  现在状态和错误在同一优先级分支内判定：主动停止清除运行级模型错误，
+  真正的模型错误仍失败，清理失败仍覆盖终态并锁定运行容量。
+  没有修改前端提示或 Pi 原始历史，也不靠匹配英文报错字符串判断停止。
+- 回归覆盖两种 Pi 中断表示（aborted/error）、SSE 终态、刷新读取、继续发送、
+  未主动停止的真实错误、abort 超时回收、清理失败不释放容量。
+- `make check` 通过；后端 32 项通过、默认跳过的 Docker 集成测试单独开启后
+  1 项通过；前端 14 项通过。
+- 重启本机服务前确认无运行任务。真实管理员/模型浏览器复测：Shell 执行中
+  点击停止，最终显示“已停止”；刷新重开仍显示 stopped。原始工具中断结果保留。
+  截图存于忽略目录 `.data/acceptance/stop-root-cause-fixed.png`。
+- 同一对话继续发送后收到 `STOP_RECOVERY_OK`，输入框恢复可发送，确认停止后容量释放和后续运行正常。
+
+## 2026-10-26：迁移到 DSH 0.2.1-rc.3
+
+- 新对话使用固定版本的官方 DSH SDK server；容器内的窄桥接扩展仅暴露
+  实时 assistant-stream、原生历史和 Agent.cancel。没有修改上游源码或复制模型循环。
+- 保留 JWT、账号、SQLite、现有前端设计和用户工作文件。旧 Pi 会话只读，
+  不转写；新状态保存至每用户 dsh 目录。模型配置仍由管理员 .env 在启动时同步。
+- 迁移前在忽略目录 `.data/backups/before-dsh-20261026/` 备份 SQLite 并记录旧
+  会话 SHA256；真实验收后账号 ID、邮箱、密码哈希及 5 个旧会话文件均与备份一致。
+- `make check` 通过；开启 Docker 后后端 40 项全部通过（包含真实 DSH 与旧 Pi
+  容器），前端 14 项通过，生产构建通过。新测试覆盖原生事件、工具错误、压缩后
+  展示、子会话过滤、只读旧历史及无需模型启动的空对话。
+- 真实管理员和 `.env` 模型验收：登录、18 个流式更新、bash 输出、停止、恢复
+  历史通过。浏览器验证真实回复 DSH_BROWSER_OK、工具执行时点击停止、停止后
+  可继续发送；最终代码重启后历史恢复正常，旧对话显示只读且输入禁用。
+- 原生工具取消结果仍保留在工具卡片中（例如 wait aborted）；运行状态正确显示
+  “已停止”，不再产生额外的运行级模型失败提示。截图在忽略目录
+  `.data/acceptance/dsh-migration.png`。
+- 本次没有实现后端重启后自动续跑、审批面板或子智能体详情 UI。DSH 为预发布，
+  安装审计存在上游依赖告警，未通过强制升级改变官方依赖组合。
+- 未提交或推送此次迁移；GitHub CI 尚未验证这批修改。
+
+## 2026-10-26：工作区预览、下载、文件交付与思考设置
+
+- 复用 shadcn CLI 的 Sheet/NativeSelect、react-markdown/remark-gfm、浏览器图片/PDF 能力和 FastAPI/Starlette FileResponse。新增工作区面板与专用交付卡片；实际实现和限制见 README。
+- DSH 通过公开 defineTool/output.render 持久化 present_files 结果。思考设置使用实际 npm 包公开 installModelSelection；同版本号的较新源码已有 agent.model.select，但发布包尚未包含，已修正研究文档。
+- 迁移前确认无活动任务，在忽略目录 .data/backups/before-file-features-20261026-073913/ 保存 SQLite 与环境配置备份。新增 conversation.reasoning，不重写账号或历史。
+- make check、生产构建通过；ORCHMESH_TEST_DOCKER=1 make test：后端 49 passed，前端 16 passed。容器测试验证真实 DSH 的交付结果持久化、off/high/default 请求字段、停止与恢复；后端覆盖鉴权、账户隔离、Range、路径穿越、链接/特殊文件、大小上限与打开后路径替换。
+- 实际管理员和项目 deepseek-flash：生成 HTML/Markdown 并调用 present_files，流式完成；两个鉴权下载内容通过校验，历史重载仍有卡片。关闭思考返回 0 个推理字符，高等级返回 92 个；不以隐藏 UI 冒充模型参数变化。
+- Codex 内置浏览器：卡片打开 HTML、目录导航、Markdown 表格预览、实际下载并与源文件逐字节一致、思考选择保存及刷新恢复通过。隔离验收 HTML 内联脚本未执行，页面保持 SCRIPT_BLOCKED。图片/PDF 分支已实现，此次没有逐格式做浏览器验收。
+- 截图：忽略目录 .data/acceptance/file-features.png。验收会话和文件留在真实管理员工作区，未加入版本管理；密钥和日志未被 Git 跟踪。未提交、推送，GitHub CI 未验收这批修改。
+- 限制：20 MiB 文件下载、1 MiB 文本预览；HTML 不执行脚本或加载外部资源；交付卡片是当前文件引用，不是版本快照。保留既有 Vite 大 chunk 提示。
+
+## 2026-10-26：桌面分栏工作台
+
+使用项目 shadcn CLI 添加官方 Resizable、Tabs；桌面文件预览不再使用遮罩抽屉。聊天与文件并排、目录常驻、多文件标签去重、关闭相邻选中、面板隐藏恢复及退出清理已接入现有 Zustand 文件状态。小屏仍使用同一内容组件的 Sheet。后端和 Agent 工具协议未改变。
+
+验证：make check、生产构建及前端 17 项通过；新增文件标签生命周期测试。Codex 内置浏览器验证真实历史卡片打开、HTML/Markdown 标签切换、分栏键盘调整、面板收起恢复；并排预览时发送真实模型请求，正常收到 WORKBENCH_OK。本轮未重新运行后端套件；上一轮含 Docker 的 49 项结果不作为本轮新运行。窄屏分支已实现，尚未单独进行手机尺寸浏览器验收。截图保存在忽略目录 .data/acceptance/workbench-layout.png。未提交或推送。
+
+
+### 左侧会话栏宽度调整
+
+左侧会话栏也接入官方 Resizable，默认 244px，最小 180px，最大窗口宽度 35%；保留窄屏导航切换。生产构建和 ESLint 通过；浏览器验证键盘调整及鼠标拖动，分隔条从约 24.2% 调至 20.5%，右侧分隔条仍可用。仅布局修改，本轮未重复调用真实模型。截图：.data/acceptance/workbench-both-sides.png。
+
+## 2026-10-26：置顶、归档与项目工作目录
+
+迁移前确认没有活动任务并备份数据库至 .data/backups/before-projects-*。新增项目表和会话组织字段，旧会话 project_id 为空，原目录不搬迁。迁移后比对旧账号全字段和旧会话标识、归属、标题，均保持一致。
+
+make check 通过，开启 Docker 的后端 51 项、前端随后补充到 19 项通过。新增项目归属、跨账户拒绝、项目/默认文件范围、生产容器挂载、置顶归档恢复保留历史、归档禁止发送、项目切换清空标签和首条消息归属测试。
+
+真实管理员浏览器创建“项目工作区验收”，真实模型执行 Shell 确认 /workspace，写入并交付 project-proof.md。宿主文件确认只存在对应项目 work 目录，默认 work 未出现同名文件；网页预览 PROJECT_WORKSPACE_OK 成功。置顶、归档隐藏、归档历史只读、恢复及置顶保留通过。截图在忽略目录 .data/acceptance/projects-and-archive.png。未提交或推送。
+
+## 2026-10-26：项目菜单与会话移动
+
+按用户确认，移动仅修改导航分组，保留原执行目录和文件引用。新增 workspace_project_id 并从原 project_id 回填，Project 增加 archived；迁移前确认无活动任务，数据库备份在 .data/backups/before-project-management-*。项目重命名不触碰目录，项目归档只影响有效只读状态、不批量改写子会话归档标志。
+
+复用 shadcn DropdownMenu/Dialog，把项目重命名、归档/恢复及会话置顶、归档、移动放入统一更多菜单。移动对话框说明文件不搬迁、排除归档目标。运行中拒绝移动和项目归档；跨账号访问拒绝。
+
+make check、生产构建通过；开启 Docker 后端 53 passed，前端 19 passed。新增归属校验、重命名空值、项目归档恢复、新建/发送禁止、移动后历史和原目录不变、运行期阻止变更测试。浏览器真实管理员验证重命名、归档隐藏、恢复、移动会话和原目录提示；移动后真实模型读取原 project-proof.md，返回 MOVE_WORKSPACE_OK，原交付卡片预览成功。验收项目为“项目管理验收”和“会话分组验收”，未修改其他用户会话。截图 .data/acceptance/project-management.png。未提交或推送。
+
+## 2026-10-26 官方 DSH 能力收敛
+
+- profile 显式加载官方 `dsh-tool-present`，删除自定义 files.mjs。聊天展示读取官方 `deliverables/presented`，旧 orchmesh.files.v1 卡片只读兼容；工作区外声明不授予网页下载权限。
+- 冷历史使用包根公开 `readColdSessionLog`，不激活 Agent；容器测试验证读取不改日志，之后可以正常 resume。实际执行仍使用 SDK resume/prompt/wait。
+- 思考等级通过 SDK initialize 传入；rc3 恢复会继承旧 effort 的行为由官方 installModelSelection 一次性明确覆盖，不再维护自定义 WeakMap。
+- 检查与构建通过；后端 54 项（含真实 DSH/Pi 容器与确定性模型）、前端 21 项通过。
+- 使用现有管理员和真实模型验证官方交付、69 个流式更新、HTML/Markdown 下载、Range、移动分组保留工作目录、归档恢复、断开继续、停止和续聊、关闭思考/恢复默认。
+- Codex 内置浏览器验证管理员登录、新卡片/HTML 预览/下载按钮、实际聊天输出与停止；旧交付记录和原 HTML 预览正常。验收过程中本地服务曾退出，重新启动后完成浏览器验收；没有据此修改认证实现。
+- 备份比对原 user/conversation/project 行及 35 个已有工作文件/历史文件均未改变。测试创建独立标记项目与会话；数据、日志和截图保留在 git 忽略的 .data 内，未提交代码。
+- 官方 WorkspaceRegistry 与完整 SessionController/Gateway 尚未接入：现有 /workspace 历史目录、独立导航分组、可恢复项目归档和账号隔离不能直接按官方桌面语义替换。具体保留理由与迁移前提见 docs/research/dsh-official-reuse-audit.md；本次不声称全部控制层已迁移。
+
+## 2026-10-26：官方项目导航与 Session Controller
+
+本节取代上一节“尚未接入 Controller”的结论。实际 rc3 容器验证后，加载五个官方 Workspace/Controller 配套插件，不引入额外 Web Server、Cookie 登录或 SDK 私有入口。项目登记/名称、会话置顶/归档以官方状态为准；SessionController 负责输入、模型选择、历史和标题投影，SDK 负责 Agent 激活与完成等待。停止继续使用公开 Agent.cancel 清理整个任务；Controller.cancel 保留队列，不适合本产品的停止语义。
+
+执行目录改用稳定的 /workspaces/<project-id> 或 /workspaces/default；/workspace 仅指向同一目录以保留已有文件引用。控制容器只读挂载目录且拒绝执行任务；未配置模型凭据也能进行元数据操作。同一用户仅有一个状态写入进程。SQL 只保留所有权、显示分组、项目归档及导航读缓存，既有行通过官方接口一次性登记。新建失败不先写入 SQL，避免失败请求留下列表记录。
+
+根据“未发布，不做兼容”要求，删除旧 pi/ 执行层、RPC、镜像与相关测试，不再维护两套运行时。核对 5 份旧 Pi 日志均未被现有会话引用，保留磁盘文件不删除。原有交付记录仍按数据内容展示。归档按官方语义清除置顶，恢复后不自动置顶，归档列表隐藏置顶入口。
+
+备份：.data/backups/before-native-navigation-20261026-084447，含数据库和 DSH 状态。迁移保留全部既有用户/项目/会话/运行行，25 份原工作文件与旧 Pi 文件 SHA-256 不变。另用 Alembic 对齐早期两个 UUID 列的声明，原值已是 32 位格式，账号与值不改写；alembic check 无漂移。
+
+验证：后端 56 项（包含真实 DSH 容器与确定性模型），前端 22 项，静态检查、API 类型同步和生产构建通过。真实管理员与配置模型验证项目/会话新建、官方标题、稳定 cwd、流式、文件交付/下载/Range、分组移动保留原文件、归档恢复、断开继续、停止续聊和思考设置。最终真实模型新会话回复 NATIVE_CONTROLLER_OK，确认 pwd 为其项目的稳定目录。内置浏览器验证导航、置顶/归档/恢复及移动后 HTML 卡片预览。验收记录位于忽略目录 .data/acceptance/native-controller.json 和 official-reuse.json。未提交或推送。
+
+## 2026-10-26：保留现有界面，对齐官方桌面导航语义
+
+本节取代上一节的 SQL 导航缓存、项目归档及显示分组移动设计。按用户选择保留当前 React 页面；官方业务 UI 依赖 ModuleLoader/Cordis，不将插件 bundle 当作普通 React 组件深路径导入。复用现有 shadcn/assistant-ui 控件与官方 Host Controller，审查见 [桌面能力对齐](../research/dsh-desktop-alignment.md)。
+
+导航直接读取官方 Workspace 成员关系、Session 标题投影及置顶/归档状态，删除 SQL 重复列。新建传 workspaceId 并采用官方返回 SessionId；SessionId 为不透明字符串，Run 引用同步调整。新增官方会话重命名/分支，项目移除保留会话及文件，取消项目归档与纯分组移动。短生命周期的创建/重命名/分支通过公开 SessionStore.flush 等待持久化，避免退出丢写。
+
+迁移前备份在 `.data/backups/before-native-authority-20261026-090741`。仅将 cwd 匹配的旧会话登记为项目成员，不匹配的进入未分组；SQL directory_id 保留原文件定位。备份比对确认原账号完整一致、原项目/会话/运行行保留、27 份原工作文件及旧 Pi 文件 SHA-256 不变。
+
+验证：后端 54 项（包括真实 rc3 容器）、前端 22 项通过；make check、生产构建和 Alembic schema check 通过。管理员真实模型测试创建项目/会话、bash 写文件、present、流式、原生分支继承历史并继续执行、移除登记后下载、置顶与归档恢复、旧移动请求拒绝。浏览器验证官方重命名、菜单和移除项目后交付卡片预览。记录在 `.data/acceptance/desktop-alignment.json` 与同名 PNG；均不纳入 Git。
+
+尚未接入官方审批、用户提问、输入队列、子任务及调度面板；本轮不声称桌面完整功能对等。未提交或推送。

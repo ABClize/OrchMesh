@@ -21,6 +21,76 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/workspace/entries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Entries */
+    get: operations["entries_api_workspace_entries_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspace/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** File */
+    get: operations["file_api_workspace_file_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listing */
+    get: operations["listing_api_projects_get"];
+    put?: never;
+    /** Create */
+    post: operations["create_api_projects_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{project_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Remove */
+    delete: operations["remove_api_projects__project_id__delete"];
+    options?: never;
+    head?: never;
+    /** Update */
+    patch: operations["update_api_projects__project_id__patch"];
+    trace?: never;
+  };
   "/api/health": {
     parameters: {
       query?: never;
@@ -87,6 +157,58 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
+    /** Update Conversation */
+    patch: operations["update_conversation_api_conversations__conversation_id__patch"];
+    trace?: never;
+  };
+  "/api/conversations/{conversation_id}/fork": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Fork Conversation */
+    post: operations["fork_conversation_api_conversations__conversation_id__fork_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/model": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Model Info */
+    get: operations["model_info_api_model_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/conversations/{conversation_id}/reasoning": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** Reasoning Preference */
+    put: operations["reasoning_preference_api_conversations__conversation_id__reasoning_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
     patch?: never;
     trace?: never;
   };
@@ -145,6 +267,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** APIError */
+    APIError: {
+      /** Detail */
+      detail: string;
+    };
     /** Body_login_api_login_access_token_post */
     Body_login_api_login_access_token_post: {
       /** Grant Type */
@@ -169,27 +296,93 @@ export interface components {
        */
       client_secret?: string | null;
     };
+    /** ConversationCreate */
+    ConversationCreate: {
+      /** Project Id */
+      project_id?: string | null;
+    };
     /** ConversationRead */
     ConversationRead: {
-      /**
-       * Id
-       * Format: uuid
-       */
+      /** Id */
       id: string;
       /** Title */
       title: string;
+      /** Reasoning */
+      reasoning: string;
+      /** Project Id */
+      project_id: string | null;
+      /** Directory Id */
+      directory_id: string | null;
+      /** Pinned */
+      pinned: boolean;
+      /** Archived */
+      archived: boolean;
       /** Created At */
       created_at: string;
+    };
+    /** ConversationUpdate */
+    ConversationUpdate: {
+      /** Title */
+      title?: string | null;
+      /** Pinned */
+      pinned?: boolean | null;
+      /** Archived */
+      archived?: boolean | null;
+    };
+    /** Entry */
+    Entry: {
+      /** Path */
+      path: string;
+      /** Name */
+      name: string;
+      /** Directory */
+      directory: boolean;
+      /** Size */
+      size: number;
     };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
     };
+    /** Listing */
+    Listing: {
+      /** Entries */
+      entries: components["schemas"]["Entry"][];
+      /** Truncated */
+      truncated: boolean;
+    };
+    /** ProjectCreate */
+    ProjectCreate: {
+      /** Name */
+      name: string;
+    };
+    /** ProjectRead */
+    ProjectRead: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /** Created At */
+      created_at: string;
+    };
+    /** ProjectUpdate */
+    ProjectUpdate: {
+      /** Name */
+      name: string;
+    };
     /** Prompt */
     Prompt: {
       /** Text */
       text: string;
+    };
+    /** ReasoningPreference */
+    ReasoningPreference: {
+      /** Reasoning */
+      reasoning: string;
     };
     /** RunRead */
     RunRead: {
@@ -211,6 +404,11 @@ export interface components {
       run_id: string | null;
       /** Cursor */
       cursor: number;
+      /**
+       * Read Only
+       * @default false
+       */
+      read_only: boolean;
       /** Error */
       error?: string | null;
     };
@@ -284,6 +482,15 @@ export interface operations {
           "application/json": components["schemas"]["Token"];
         };
       };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -291,6 +498,306 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  entries_api_workspace_entries_get: {
+    parameters: {
+      query?: {
+        path?: string;
+        project_id?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Listing"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  file_api_workspace_file_get: {
+    parameters: {
+      query: {
+        path: string;
+        project_id?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  listing_api_projects_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectRead"][];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  create_api_projects_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProjectCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectRead"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  remove_api_projects__project_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: boolean;
+          };
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  update_api_projects__project_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProjectUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectRead"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
         };
       };
     };
@@ -315,6 +822,24 @@ export interface operations {
           };
         };
       };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
     };
   };
   me_api_me_get: {
@@ -333,6 +858,24 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["UserRead"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
         };
       };
     };
@@ -355,6 +898,24 @@ export interface operations {
           "application/json": components["schemas"]["ConversationRead"][];
         };
       };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
     };
   };
   create_conversation_api_conversations_post: {
@@ -364,7 +925,11 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["ConversationCreate"] | null;
+      };
+    };
     responses: {
       /** @description Successful Response */
       201: {
@@ -373,6 +938,33 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ConversationRead"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
         };
       };
     };
@@ -397,6 +989,15 @@ export interface operations {
           "application/json": components["schemas"]["Snapshot"];
         };
       };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -404,6 +1005,210 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  update_conversation_api_conversations__conversation_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ConversationUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationRead"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  fork_conversation_api_conversations__conversation_id__fork_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationRead"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  model_info_api_model_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+    };
+  };
+  reasoning_preference_api_conversations__conversation_id__reasoning_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReasoningPreference"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationRead"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
         };
       };
     };
@@ -432,6 +1237,15 @@ export interface operations {
           "application/json": components["schemas"]["RunRead"];
         };
       };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -439,6 +1253,15 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
         };
       };
     };
@@ -465,6 +1288,15 @@ export interface operations {
           };
         };
       };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -472,6 +1304,15 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["APIError"];
         };
       };
     };
@@ -496,6 +1337,15 @@ export interface operations {
           "text/event-stream": unknown;
         };
       };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": components["schemas"]["APIError"];
+        };
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -503,6 +1353,15 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": components["schemas"]["APIError"];
         };
       };
     };

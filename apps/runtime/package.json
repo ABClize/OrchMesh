@@ -1,0 +1,16 @@
+{
+  "name": "@orchmesh/runtime",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-sdk-jsonrpc-server": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-sdk-protocol": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-tool-present": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-workspace": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-connection": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-file-upload": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-workspace-controller": "0.2.1-rc.3"
+  }
+}

@@ -1,5 +1,6 @@
 """Exercise a pre-JWT database with real legacy UUID and password formats."""
 
+import json
 import os
 import sqlite3
 import subprocess
@@ -47,7 +48,7 @@ async def test_legacy_database_migrates_without_account_or_history_loss(tmp_path
     session_file.parent.mkdir(parents=True)
     session_file.write_text("original Pi history\n")
     subprocess.run(
-        command + ["head"],
+        command + ["20261026_uuid_storage"],
         cwd=ROOT / "apps/server",
         env=env,
         check=True,
@@ -67,6 +68,43 @@ async def test_legacy_database_migrates_without_account_or_history_loss(tmp_path
         "SELECT name FROM sqlite_master WHERE name='accesstoken'"
     ).fetchall()
     assert session_file.read_text() == "original Pi history\n"
+    rejected = subprocess.run(
+        command + ["head"], cwd=ROOT / "apps/server", env=env, capture_output=True
+    )
+    assert rejected.returncode != 0
+    assert db.execute("SELECT title FROM conversation").fetchone()[0] == "kept title"
+    # The platform fixture stands in for an already adopted official metadata record.
+    native = tmp_path / "users" / str(uid) / "dsh"
+    native.mkdir()
+    (native / "navigation.json").write_text(
+        json.dumps(
+            {
+                "workspaces": [],
+                "pinned": [],
+                "archived": [],
+                "sessions": {
+                    "items": [
+                        {
+                            "sessionId": str(cid),
+                            "projections": {"values": {"title": "kept title"}},
+                        }
+                    ]
+                },
+            }
+        )
+    )
+    db.execute("UPDATE conversation SET native_imported = 1")
+    db.commit()
+    subprocess.run(
+        command + ["head"],
+        cwd=ROOT / "apps/server",
+        env=env,
+        check=True,
+        capture_output=True,
+    )
+    assert "title" not in {
+        row[1] for row in db.execute("PRAGMA table_info(conversation)")
+    }
     db.close()
     settings = Settings(
         _env_file=None,

@@ -24,10 +24,12 @@ class Settings(BaseSettings):
     model_api: str = "openai-completions"
     model_api_key: SecretStr = SecretStr("")
     model_id: str = ""
+    model_reasoning_efforts: dict[str, str | None] | None = None
+    model_thinking_format: Literal["deepseek"] | None = None
     access_token_expire_minutes: int = Field(default=60, ge=1)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_retention_days: int = Field(default=30, ge=1)
-    pi_image: str = "orchmesh-pi:1.4.0"
+    dsh_image: str = "orchmesh-dsh:0.2.1-rc.3"
     max_active_runs: int = 4
     run_timeout: int = 1800
     web_dir: Path = ROOT / "apps/web/dist"

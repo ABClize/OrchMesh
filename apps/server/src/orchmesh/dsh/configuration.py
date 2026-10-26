@@ -1,4 +1,4 @@
-"""The environment owns project-api; Pi owns all other provider/settings entries."""
+"""Manage per-user model settings, retaining the pre-DSH configuration layout."""
 
 import json
 import os
@@ -46,7 +46,7 @@ def read_config(path: Path) -> dict:
         return value
     except (ValueError, UnicodeError):
         raise ValueError(
-            f"Invalid Pi {path.name}; configuration was not replaced"
+            f"Invalid model {path.name}; configuration was not replaced"
         ) from None
 
 
@@ -68,13 +68,27 @@ def sync_model(settings: Settings, user_id: uuid.UUID) -> None:
     models, defaults = read_config(models_path), read_config(defaults_path)
     providers = models.setdefault("providers", {})
     if not isinstance(providers, dict):
-        raise ValueError("Pi models.json providers must be an object")
+        raise ValueError("models.json providers must be an object")
     if settings.model_id:
         providers[PROVIDER] = {
             "baseUrl": settings.model_base_url,
             "api": settings.model_api,
             "apiKey": settings.model_api_key.get_secret_value(),
-            "models": [{"id": settings.model_id}],
+            "models": [
+                {
+                    "id": settings.model_id,
+                    **(
+                        {"reasoningEfforts": settings.model_reasoning_efforts}
+                        if settings.model_reasoning_efforts
+                        else {}
+                    ),
+                    **(
+                        {"compat": {"thinkingFormat": settings.model_thinking_format}}
+                        if settings.model_thinking_format
+                        else {}
+                    ),
+                }
+            ],
         }
         defaults.update(defaultProvider=PROVIDER, defaultModel=settings.model_id)
     else:

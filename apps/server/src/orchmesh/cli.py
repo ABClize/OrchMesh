@@ -1,17 +1,14 @@
 import argparse
 import asyncio
-import fcntl
 import getpass
-import json
 import os
 import subprocess
-import uuid
 
 from sqlalchemy import select
 
 from .accounts import UserCreate, create_account
 from .config import Settings
-from .pi.containers import Containers
+from .dsh.containers import Containers
 from .storage import Database, User
 
 
@@ -30,59 +27,34 @@ async def create_user(email: str):
             root = Containers(settings).prepare(user.id)
             print(
                 f"Created {user.email}\nUser ID: {user.id}\n"
-                f"Pi config: {root / 'config'}"
+                f"Model config: {root / 'config'}"
             )
     finally:
         await db.engine.dispose()
 
 
-async def configure_pi(email: str, provider: str, model: str):
-    settings = Settings()
+async def configure_model(email: str, base_url: str, model: str, api: str):
+    from pydantic import SecretStr
+
+    from .dsh.configuration import sync_model, validate_model
+
+    settings = Settings().model_copy(
+        update={
+            "model_base_url": base_url,
+            "model_id": model,
+            "model_api": api,
+            "model_api_key": SecretStr(getpass.getpass("Model API key: ")),
+        }
+    )
+    validate_model(settings)
     db = Database(settings)
     try:
         async with db.sessions() as session:
-            user = await session.scalar(
-                select(User).where(User.__table__.c.email == email)
-            )
+            user = await session.scalar(select(User).where(User.email == email))
             if user is None:
                 raise SystemExit("User not found")
-            root = Containers(settings).prepare(user.id) / "config"
-            path = root / "settings.json"
-            config = json.loads(path.read_text()) if path.exists() else {}
-            config.update(defaultProvider=provider, defaultModel=model)
-            path.write_text(json.dumps(config, indent=2) + "\n")
-            path.chmod(0o600)
-            print(
-                "Configured provider/model. Put this user's Pi auth.json "
-                f"or models.json in {root}"
-            )
-            print("No credentials were copied or changed.")
-    finally:
-        await db.engine.dispose()
-
-
-async def pi_login(email: str):
-    """Launch the official Pi TUI with only this project's user configuration."""
-    settings = Settings()
-    db = Database(settings)
-    try:
-        async with db.sessions() as session:
-            user = await session.scalar(
-                select(User).where(User.__table__.c.email == email)
-            )
-            if user is None:
-                raise SystemExit("User not found")
-            containers = Containers(settings)
-            # Same runtime name: Docker refuses if this user's Pi is already active.
-            command = containers.command(user.id, uuid.uuid4())[:-4]
-            command.insert(2, "--tty")
-            print("Use Pi /login, /model (Ctrl+S saves default), then /exit.")
-            with (settings.data_dir / "runtime.lock").open("a") as lock:
-                try:
-                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except BlockingIOError:
-                    raise SystemExit("Stop the API before opening Pi configuration.")
-                await asyncio.to_thread(subprocess.run, command, check=True)
+            sync_model(settings, user.id)
+            print("Model configured for this user; effective on the next run.")
     finally:
         await db.engine.dispose()
 
@@ -96,12 +68,11 @@ def main():
     sub.add_parser("build-image")
     create = sub.add_parser("create-user")
     create.add_argument("email")
-    config = sub.add_parser("configure-pi")
+    config = sub.add_parser("configure-model")
     config.add_argument("email")
-    config.add_argument("--provider", required=True)
+    config.add_argument("--base-url", required=True)
     config.add_argument("--model", required=True)
-    login = sub.add_parser("pi-login")
-    login.add_argument("email")
+    config.add_argument("--api", default="openai-completions")
     args = parser.parse_args()
     if args.command in ("run", "dev"):
         from .serve import serve
@@ -115,9 +86,9 @@ def main():
                 "docker",
                 "build",
                 "-f",
-                "deploy/pi.Dockerfile",
+                "deploy/dsh.Dockerfile",
                 "-t",
-                Settings().pi_image,
+                Settings().dsh_image,
                 ".",
             ],
             cwd=ROOT,
@@ -125,7 +96,5 @@ def main():
         )
     elif args.command == "create-user":
         asyncio.run(create_user(args.email))
-    elif args.command == "configure-pi":
-        asyncio.run(configure_pi(args.email, args.provider, args.model))
     else:
-        asyncio.run(pi_login(args.email))
+        asyncio.run(configure_model(args.email, args.base_url, args.model, args.api))

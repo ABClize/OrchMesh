@@ -9,7 +9,7 @@ from ..logging import failure, logger
 
 
 class RPC:
-    """One Pi process. The reader never waits for an HTTP subscriber."""
+    """One DSH process. The reader never waits for an HTTP subscriber."""
 
     def __init__(
         self,
@@ -52,13 +52,13 @@ class RPC:
         try:
             while line := await self.process.stdout.readline():
                 record = json.loads(line)
-                if record.get("type") == "response":
+                if "id" in record and "method" not in record:
                     future = self.pending.get(record.get("id"))
                     if future and not future.done():
-                        if record.get("success"):
-                            future.set_result(record.get("data", {}))
+                        if "error" not in record:
+                            future.set_result(record.get("result", {}))
                         else:
-                            future.set_exception(RuntimeError("Pi command failed"))
+                            future.set_exception(RuntimeError("DSH command failed"))
                 else:
                     self.on_event(record)
         except Exception as exc:
@@ -68,18 +68,28 @@ class RPC:
             self.closed.set()
             for future in self.pending.values():
                 if not future.done():
-                    future.set_exception(RuntimeError("Pi process exited"))
+                    future.set_exception(RuntimeError("DSH process exited"))
 
     async def call(self, method: str, timeout: float = 30, **params) -> Any:
         assert self.process and self.process.stdin
         if self.closed.is_set():
-            raise RuntimeError("Pi process exited")
+            raise RuntimeError("DSH process exited")
         key = str(uuid.uuid4())
         future = asyncio.get_running_loop().create_future()
         self.pending[key] = future
         try:
             self.process.stdin.write(
-                (json.dumps({"id": key, "type": method, **params}) + "\n").encode()
+                (
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": key,
+                            "method": method,
+                            "params": params,
+                        }
+                    )
+                    + "\n"
+                ).encode()
             )
             await self.process.stdin.drain()
             return await asyncio.wait_for(future, timeout)

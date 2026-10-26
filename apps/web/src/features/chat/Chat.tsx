@@ -1,26 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from "react";
 import {
   AssistantRuntimeProvider,
   useExternalStoreRuntime,
 } from "@assistant-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Welcome, suggestions } from "./Welcome";
+import { AffectTool } from "./AffectTool";
+import { sendPrompt } from "./commands";
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { api } from "@/lib/api";
 import { connectEvents } from "@/lib/events";
 import { toThreadMessages, useChat, type Snapshot } from "./store";
 
-function Welcome() {
-  return (
-    <div className="flex flex-col gap-3 px-6 py-12 text-center">
-      <h1 className="text-3xl font-semibold tracking-tight">从一个想法开始</h1>
-      <p className="text-muted-foreground">
-        让 Pi 帮你分析问题、读写文件，或运行命令。
-      </p>
-    </div>
-  );
+class HistoryBusy extends Error {}
+
+function ToolCards({ children }: PropsWithChildren) {
+  return <div className="flex flex-col gap-2">{children}</div>;
 }
-const components = { Welcome };
+const components = { Welcome, ToolFallback: AffectTool, ToolGroup: ToolCards };
 
 export function Chat({
   id,
@@ -50,10 +54,12 @@ export function Chat({
         if (value.type === "snapshot") {
           useChat.getState().snapshot(value);
           if (value.status !== "running") {
+            void query.invalidateQueries({ queryKey: ["workspace"] });
             void query.invalidateQueries({ queryKey: ["conversations"] });
             return true;
           }
-        } else if (value.type === "pi") useChat.getState().event(value.event);
+        } else if (value.type === "agent")
+          useChat.getState().event(value.event);
         return false;
       },
       disconnected: () => setConnectionError(true),
@@ -74,11 +80,15 @@ export function Chat({
       .fetchQuery({
         queryKey: ["snapshot", id],
         staleTime: 0,
+        retry: (count, error) => error instanceof HistoryBusy && count < 3,
+        retryDelay: 1000,
         queryFn: async ({ signal }) => {
-          const { data, error } = await api.GET(
+          const { data, error, response } = await api.GET(
             "/api/conversations/{conversation_id}",
             { params: { path: { conversation_id: id } }, signal },
           );
+          if (response.status === 409)
+            throw new HistoryBusy("执行环境正在读取，请重新打开对话。");
           if (error) throw new Error("读取对话失败，请稍后重试。");
           return data as Snapshot;
         },
@@ -106,9 +116,11 @@ export function Chat({
 
   const runtime = useExternalStoreRuntime({
     messages,
+    suggestions: messages.length === 0 ? suggestions : [],
     convertMessage: (message) => message,
     isRunning: state.status === "running",
     isLoading: loading,
+    isDisabled: state.read_only,
     onNew: async (message) => {
       const text = message.content
         .filter((p) => p.type === "text")
@@ -116,20 +128,8 @@ export function Chat({
         .join("\n");
       useChat.setState({ status: "running", error: null });
       try {
-        const { error, response } = await api.POST(
-          "/api/conversations/{conversation_id}/runs",
-          {
-            params: { path: { conversation_id: id } },
-            body: { text },
-          },
-        );
+        await sendPrompt(id, text);
         if (!mounted.current) return;
-        if (error)
-          throw new Error(
-            response.status === 409
-              ? "已有任务运行，请稍后再试。"
-              : "发送失败，请检查连接。",
-          );
         subscribe();
         void query.invalidateQueries({ queryKey: ["conversations"] });
       } catch (error) {
@@ -149,6 +149,14 @@ export function Chat({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div className="flex min-h-0 flex-1 flex-col">
+        {state.read_only && (
+          <Alert className="mx-auto mt-3 max-w-3xl">
+            <AlertDescription>
+              此对话为只读。归档项目或会话请在侧栏恢复；旧 Pi
+              历史请新建对话继续。
+            </AlertDescription>
+          </Alert>
+        )}
         {(state.error || connectionError || state.status === "stopped") && (
           <Alert className="mx-auto mt-3 max-w-3xl">
             <AlertDescription>

@@ -8,7 +8,7 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: "Geist Variable", sans-serif;
+  --font-sans: "Geist Variable", "Noto Sans CJK SC", system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -72,7 +72,7 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  --background: #fcfcfc;
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -83,11 +83,11 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: #696969;
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
+  --border: #e7e7e7;
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.87 0 0);
@@ -96,7 +96,7 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
+  --sidebar: #f5f5f5;
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -155,3 +155,260 @@
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+
+/* AffectUI integration: shared tokens, without replacing component motion. */
+:root {
+  --shadow-surface:
+    0 0 0 1px var(--border), 0 2px 4px rgb(0 0 0 / 3%),
+    0 16px 48px rgb(0 0 0 / 3%);
+}
+.ui-buttonc.ui-buttonc,
+.ui-pm.ui-pm,
+.ui-tl.ui-tl {
+  font-family: var(--font-sans);
+}
+.ui-pm.ui-pm {
+  --ui-pm-card: var(--card);
+  --ui-pm-ink: var(--foreground);
+  --ui-pm-text: var(--foreground);
+  --ui-pm-muted: var(--muted-foreground);
+  --ui-pm-fill: var(--foreground);
+  --ui-pm-hover: var(--accent);
+}
+.workspace-layout {
+  display: flex;
+  height: 100dvh;
+  padding: 8px 8px 8px 0;
+  background: var(--sidebar);
+}
+.workspace-sidebar {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px;
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  height: 32px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+}
+.brand-mark svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.8;
+}
+.sidebar-new {
+  width: 100%;
+  justify-content: flex-start;
+}
+.sidebar-section-label {
+  padding: 8px 10px 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.workspace-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--background);
+}
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  flex-shrink: 0;
+  padding: 0 24px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.chat-header-note {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 12px;
+}
+.chat-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 28px;
+  text-align: center;
+}
+.chat-welcome h1 {
+  font-size: clamp(23px, 2.2vw, 28px);
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+.chat-welcome p {
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.login-card {
+  --card-spacing: 24px;
+  box-shadow: var(--shadow-surface);
+}
+.conversation-item {
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 400;
+}
+.conversation-item[aria-current="page"] {
+  background: var(--card);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
+}
+.account-trigger {
+  width: 100%;
+  height: 52px;
+  justify-content: flex-start;
+  gap: 10px;
+  font-weight: 400;
+}
+.account-avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--secondary);
+}
+.account-popover {
+  padding: 0;
+  width: 280px;
+  border-radius: 18px;
+  box-shadow: var(--shadow-surface);
+}
+.account-popover .ui-pm {
+  max-width: none;
+}
+[data-slot="aui_composer-shell"] {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--muted) 50%, transparent),
+    0 2px 4px rgb(0 0 0 / 3%);
+  transition:
+    box-shadow 200ms,
+    border-color 200ms;
+}
+[data-slot="aui_composer-shell"]:focus-within {
+  box-shadow:
+    0 0 0 3px var(--muted),
+    0 3px 8px rgb(0 0 0 / 4%);
+}
+.ui-tcc.ui-tcc {
+  font-family: var(--font-sans);
+}
+@media (max-width: 767px) {
+  .workspace-layout {
+    padding: 0;
+  }
+  .workspace-sidebar {
+    display: none;
+  }
+  .workspace-layout[data-sidebar-open="true"] .workspace-sidebar {
+    display: flex;
+    width: 100%;
+  }
+  .workspace-layout[data-sidebar-open="true"] .workspace-main {
+    display: none;
+  }
+  .workspace-main {
+    border: 0;
+    border-radius: 0;
+  }
+  .chat-header {
+    padding: 0 12px;
+  }
+  .chat-header-note {
+    display: none;
+  }
+  .chat-welcome {
+    padding-bottom: 24px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.aui-thread-welcome-suggestion {
+  background: var(--muted);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.aui-thread-welcome-suggestion > span[aria-hidden] {
+  display: none;
+}
+.aui-thread-welcome-suggestion:hover {
+  background: var(--accent);
+}
+
+.chat-header > button {
+  flex-shrink: 0;
+}
+
+/* Keep the conversation mounted while opening or resizing the workspace. */
+.workbench {
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--background);
+}
+.workbench .workspace-main {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.workbench-nav-toggle {
+  display: none;
+}
+@media (min-width: 768px) and (max-width: 1199px) {
+  .workspace-layout[data-files-open="true"] .workspace-sidebar {
+    display: none;
+  }
+  .workspace-layout[data-files-open="true"] .workbench-nav-toggle {
+    display: inline-flex;
+  }
+  .workspace-layout[data-files-open="true"][data-sidebar-open="true"]
+    .workspace-sidebar {
+    display: flex;
+    width: 100%;
+  }
+}
+@media (max-width: 767px) {
+  .workbench {
+    border: 0;
+    border-radius: 0;
+  }
+  .workbench-nav-toggle {
+    display: inline-flex;
+  }
+  .workspace-layout[data-sidebar-open="true"] .workbench {
+    display: none;
+  }
+}

@@ -22,11 +22,25 @@ class User(Base):
     is_verified: Mapped[bool] = mapped_column(default=False)
 
 
+class Project(Base):
+    __tablename__ = "project"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    native_id: Mapped[str | None] = mapped_column(String(80))
+    # Ownership and directory identity only; all navigation state lives in DSH.
+    created_at: Mapped[str] = mapped_column(
+        default=lambda: datetime.now(UTC).isoformat()
+    )
+
+
 class Conversation(Base):
     __tablename__ = "conversation"
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), index=True)
-    title: Mapped[str] = mapped_column(String(120), default="新对话")
+    directory_id: Mapped[uuid.UUID | None] = mapped_column()
+    reasoning: Mapped[str] = mapped_column(
+        String(32), default="default", server_default="default"
+    )
     created_at: Mapped[str] = mapped_column(
         default=lambda: datetime.now(UTC).isoformat()
     )
@@ -35,7 +49,9 @@ class Conversation(Base):
 class Run(Base):
     __tablename__ = "run"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversation.id"))
+    conversation_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("conversation.id")
+    )
     status: Mapped[str] = mapped_column(default="running")
     created_at: Mapped[str] = mapped_column(
         default=lambda: datetime.now(UTC).isoformat()

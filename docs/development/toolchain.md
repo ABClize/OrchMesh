@@ -4,7 +4,7 @@
 
 ## 依赖与版本
 
-Python 使用 3.12，前端及 Pi 镜像使用 Node 24。后端依赖声明在 `apps/server/pyproject.toml`，解析结果在 `uv.lock`；前端声明在 `package.json`，解析结果在 `package-lock.json`。声明可能使用兼容范围，锁文件才是复现依据。
+Python 使用 3.12，前端及 DSH 镜像使用 Node 24。后端依赖声明在 `apps/server/pyproject.toml`，解析结果在 `uv.lock`；前端声明在 `package.json`，解析结果在 `package-lock.json`。声明可能使用兼容范围，锁文件才是复现依据。
 
 [toolchain-versions.json](toolchain-versions.json) 是本次从锁文件及本机运行时生成的直接依赖快照，不是上游 latest 清单。安装使用 `uv sync --locked` 和 `npm ci`；升级后重新锁定并验证，不用 force 或 legacy-peer-deps 跳过约束。
 
@@ -15,13 +15,13 @@ Python 使用 3.12，前端及 Pi 镜像使用 Node 24。后端依赖声明在 `
 
 ## 运行与质量检查
 
-`make setup` 准备依赖和镜像，`make dev` 启动双进程热更新，`make run` 构建并以单 Web 服务运行。两个启动入口均执行 Alembic；FastAPI entrypoint 已在 pyproject 中配置。`orchmesh` 管理 CLI 使用 Python argparse，提供账号、Pi 配置、镜像和启动入口。
+`make setup` 准备依赖和镜像，`make dev` 启动双进程热更新，`make run` 构建并以单 Web 服务运行。两个启动入口均执行 Alembic；FastAPI entrypoint 已在 pyproject 中配置。`orchmesh` 管理 CLI 使用 Python argparse，提供账号、模型配置、镜像和启动入口。
 
-`make check` 执行 Ruff lint/format、Pyright、ESLint、TypeScript、Prettier，以及只读的 API 类型同步检查。`make test` 构建前端并执行 pytest/Vitest；`ORCHMESH_TEST_DOCKER=1 make test` 加测真实 Pi 镜像与本地模拟模型。
+`make check` 执行 Ruff lint/format、Pyright、ESLint、TypeScript、Prettier，以及只读的 API 类型同步检查。`make test` 构建前端并执行 pytest/Vitest；`ORCHMESH_TEST_DOCKER=1 make test` 加测真实 DSH 镜像与本地模拟模型。
 
 更新 API 后运行 `./scripts/generate-api.sh`；`./scripts/check-api.sh` 在临时目录导出并比较 schema/types，不改写仓库文件，也不使用运行数据目录。
 
-GitHub Actions 配置位于 `.github/workflows/check.yml`，使用锁定依赖执行相同检查和默认测试，不读取个人 `.env`。当前仅完成本地验证，尚未在 GitHub 运行。浏览器和真实模型验收按 [验收清单](browser-acceptance.md) 单独执行。
+GitHub Actions 配置位于 `.github/workflows/check.yml`，使用锁定依赖执行相同检查和默认测试，不读取个人 `.env`。本次 DSH 迁移仅完成本地验证，尚未提交至 GitHub。浏览器和真实模型验收按 [验收清单](browser-acceptance.md) 单独执行。
 
 ## 官方组件 CLI
 
@@ -35,7 +35,7 @@ uv run --directory apps/server alembic --help
 
 现有工程由 create-vite、shadcn 和 assistant-ui CLI 初始化。继续按需添加组件，更新前检查本地定制；避免生成另一套默认 Next.js/AI SDK 工程。Tailwind 使用 Vite 插件。项目不安装额外浏览器 CLI 或 Playwright Test，交互调试使用 Codex 内置浏览器。
 
-`@assistant-ui/react-pi` 仅使用浏览器安全入口的公开消息转换函数。当前未启用其 Node SDK supervisor；Pi 1.4 RPC 与 SDK reducer 的完整消息契约不同，详见 [架构说明](../architecture/project-blueprint.md#复用边界)。
+`@assistant-ui/react-pi` 仅使用浏览器安全入口的公开消息转换函数。当前未启用其 Node SDK supervisor；DSH 原生事件被适配为已有的聊天展示格式，详见 [架构说明](../architecture/project-blueprint.md#复用边界)。
 
 ## 项目级 Skills
 
@@ -47,4 +47,8 @@ uv run --directory apps/server alembic --help
 | shadcn-ui/ui | shadcn |
 | assistant-ui/skills | assistant-ui、setup、runtime、elements、primitives、markdown、thread-list、tools、streaming、update |
 
-从仓库根目录使用 `npx skills list --json` 查看，维护时使用 `npx skills update -p -y`。上游默认示例不覆盖项目已确认的 FastAPI/Pi、SQLAlchemy/asyncio 和多用户容器边界。
+从仓库根目录使用 `npx skills list --json` 查看，维护时使用 `npx skills update -p -y`。上游默认示例不覆盖项目已确认的 FastAPI/DSH、SQLAlchemy/asyncio 和多用户容器边界。
+
+## DSH 迁移
+
+新引擎固定为 0.2.1-rc.3，运行时依赖锁在 apps/runtime/package-lock.json，通过 make setup 构建镜像。其他用户使用 orchmesh configure-model；原 configure-pi/pi-login 不再用于新引擎。旧 Pi 运行时已移除。见 [执行层说明](../architecture/dsh-runtime.md)。

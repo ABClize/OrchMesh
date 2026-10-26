@@ -42,13 +42,14 @@ async def test_bearer_auth_and_ownership(app):
         assert await app.state.auth.valid_token(token)
 
 
-async def test_stream_stop_and_resume_history(app):
+@pytest.mark.parametrize("prompt", ["slow", "abort-as-error"])
+async def test_stream_stop_and_resume_history(app, prompt):
     client = await authenticated(app)
     async with aclosing(client):
         cid = (await client.post("/api/conversations")).json()["id"]
         url = f"/api/conversations/{cid}"
         assert (
-            await client.post(url + "/runs", json={"text": "slow"})
+            await client.post(url + "/runs", json={"text": prompt})
         ).status_code == 202
         assert (
             await client.post(url + "/runs", json={"text": "duplicate"})
@@ -64,10 +65,21 @@ async def test_stream_stop_and_resume_history(app):
         events = await asyncio.wait_for(subscription, 5)
         assert "text_delta" in events.text
         assert '"stopped"' in events.text
+        snapshots = [
+            json.loads(line[6:])
+            for line in events.text.splitlines()
+            if line.startswith("data: ")
+            and json.loads(line[6:]).get("type") == "snapshot"
+        ]
+        assert snapshots[-1]["status"] == "stopped"
+        assert snapshots[-1]["error"] is None
         await settle(app)
         restored = (await client.get(url)).json()
         assert restored["status"] == "stopped"
-        assert restored["messages"][-1]["stopReason"] == "aborted"
+        assert restored["error"] is None
+        assert restored["messages"][-1]["stopReason"] == (
+            "error" if prompt == "abort-as-error" else "aborted"
+        )
         assert (
             await client.post(url + "/runs", json={"text": "again"})
         ).status_code == 202
@@ -161,12 +173,12 @@ async def test_snapshot_recovers_buffer_overflow(app):
 
 
 async def test_abort_timeout_releases_user_after_process_cleanup(app, monkeypatch):
-    from orchmesh.pi.rpc import RPC
+    from orchmesh.dsh.rpc import RPC
 
     original = RPC.call
 
     async def timeout_abort(self, method, **params):
-        if method == "abort":
+        if method == "orchmesh/stop":
             raise TimeoutError
         return await original(self, method, **params)
 
@@ -181,11 +193,11 @@ async def test_abort_timeout_releases_user_after_process_cleanup(app, monkeypatc
         await client.post(url + "/stop")
         await settle(app)
         assert run.status == "stopped"
+        assert run.error is None
         assert run.rpc.process.returncode is not None
 
 
 async def test_restart_marks_running_metadata_interrupted(app):
-    import uuid
 
     from sqlalchemy import select
 
@@ -195,7 +207,7 @@ async def test_restart_marks_running_metadata_interrupted(app):
     async with aclosing(client):
         cid = (await client.post("/api/conversations")).json()["id"]
     async with app.state.db.sessions() as session:
-        run = Run(conversation_id=uuid.UUID(cid))
+        run = Run(conversation_id=cid)
         session.add(run)
         await session.commit()
         run_id = run.id
@@ -249,3 +261,65 @@ async def test_same_account_independent_tokens(app):
         del one.headers["Authorization"]
         assert (await one.get("/api/me")).status_code == 401
         assert (await two.get("/api/me")).status_code == 200
+
+
+async def test_stop_with_provider_error_has_no_failure_in_terminal_snapshot(app):
+    client = await authenticated(app)
+    async with aclosing(client):
+        cid = (await client.post("/api/conversations")).json()["id"]
+        url = f"/api/conversations/{cid}"
+        await client.post(url + "/runs", json={"text": "abort-as-error"})
+        run = next(iter(app.state.manager.active.values()))
+        await asyncio.wait_for(run.ready.wait(), 3)
+        assert (await client.post(url + "/stop")).status_code == 200
+        assert run.finished
+        final = run.snapshot()
+        assert final["messages"][-1]["stopReason"] == "error"
+        assert final["status"] == "stopped"
+        assert final["error"] is None
+        terminal = run.events[-1][1]
+        assert terminal["type"] == "snapshot"
+        assert terminal["status"] == "stopped"
+        assert terminal["error"] is None
+        restored = (await client.get(url)).json()
+        assert restored["status"] == "stopped"
+        assert restored["error"] is None
+        assert (
+            await client.post(url + "/runs", json={"text": "again"})
+        ).status_code == 202
+        await settle(app)
+        assert (await client.get(url)).json()["status"] == "completed"
+
+
+async def test_model_error_without_stop_remains_failure(app):
+    client = await authenticated(app)
+    async with aclosing(client):
+        cid = (await client.post("/api/conversations")).json()["id"]
+        url = f"/api/conversations/{cid}"
+        await client.post(url + "/runs", json={"text": "model-error"})
+        run = next(iter(app.state.manager.active.values()))
+        await settle(app)
+        assert run.snapshot()["status"] == "failed"
+        assert "模型调用失败" in run.snapshot()["error"]
+        assert (await client.get(url)).json()["status"] == "failed"
+
+
+async def test_cleanup_failure_overrides_stop_and_retains_capacity(app, monkeypatch):
+    async def fail_cleanup(user_id):
+        raise RuntimeError("cleanup unavailable")
+
+    client = await authenticated(app)
+    async with aclosing(client):
+        cid = (await client.post("/api/conversations")).json()["id"]
+        url = f"/api/conversations/{cid}"
+        await client.post(url + "/runs", json={"text": "abort-as-error"})
+        run = next(iter(app.state.manager.active.values()))
+        await asyncio.wait_for(run.ready.wait(), 3)
+        monkeypatch.setattr(app.state.manager.containers, "kill", fail_cleanup)
+        await client.post(url + "/stop")
+        assert run.finished
+        assert run.snapshot()["status"] == "interrupted"
+        assert "执行环境清理失败" in run.snapshot()["error"]
+        assert (
+            await client.post(url + "/runs", json={"text": "again"})
+        ).status_code == 409

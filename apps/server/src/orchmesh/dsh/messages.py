@@ -2,7 +2,7 @@ from copy import deepcopy
 
 
 class Messages:
-    """Transient projection; durable history remains Pi's own session file."""
+    """Transient projection; durable history remains DSH's own session files."""
 
     def __init__(self, messages: list[dict] | None = None):
         self.messages = deepcopy(messages or [])
@@ -10,7 +10,20 @@ class Messages:
 
     def accept(self, event: dict):
         kind = event.get("type")
-        if kind == "message_start":
+        if kind == "tool_execution_end":
+            target = next(
+                (
+                    m
+                    for m in self.messages
+                    if m.get("role") == "toolResult"
+                    and m.get("toolCallId") == event["toolCallId"]
+                ),
+                None,
+            )
+            if target is not None:
+                target["content"] = deepcopy(event["result"]["content"])
+                target["isError"] = event.get("isError", False)
+        elif kind == "message_start":
             self.messages.append(deepcopy(event["message"]))
             self.current = len(self.messages) - 1
         elif kind == "message_end":

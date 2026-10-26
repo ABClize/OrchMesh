@@ -1,3 +1,12 @@
 **
 !deploy/
 !deploy/pi.Dockerfile
+!deploy/dsh.Dockerfile
+!apps/
+!apps/runtime/
+!apps/runtime/package.json
+!apps/runtime/package-lock.json
+!apps/runtime/bridge.mjs
+!apps/runtime/launch.mjs
+
+!apps/runtime/files.mjs
