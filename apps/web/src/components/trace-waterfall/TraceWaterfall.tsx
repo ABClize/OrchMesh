@@ -18,6 +18,10 @@ export type TraceSpan = {
   kind: string;
   start: number | null;
   end: number | null;
+  label?: string;
+  running?: boolean;
+  expandable?: boolean;
+  depth?: number;
   state: "open" | "complete" | "error" | "incomplete";
 };
 export const durationLabel = (ms: number) =>
@@ -33,12 +37,26 @@ export function TraceWaterfall<T extends TraceSpan>({
   running,
   renderDetail,
   statusLabel,
+  expandedIds,
+  onToggle,
+  onSelectSpan,
+  selectedId,
+  title = "Trace",
+  axisLabel = "轮次 / 步骤 / 工具",
+  summary,
 }: {
   spans: T[];
   live: boolean;
   statusLabel?: string;
   running: boolean;
-  renderDetail: (span: T) => ReactNode;
+  renderDetail?: (span: T) => ReactNode;
+  expandedIds?: ReadonlySet<string>;
+  onToggle?: (id: string) => void;
+  onSelectSpan?: (span: T) => void;
+  selectedId?: string | null;
+  title?: string;
+  axisLabel?: string;
+  summary?: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
@@ -57,11 +75,18 @@ export function TraceWaterfall<T extends TraceSpan>({
   const recordedEnd = times.length ? Math.max(...times) : start;
   const end = live && open ? Math.max(now, recordedEnd) : recordedEnd;
   const range = Math.max(1, end - start);
-  const detail = spans.find((s) => s.id === selected);
+  const selection = selectedId === undefined ? selected : selectedId;
+  const detail = spans.find((s) => s.id === selection);
+  const choose = (span: T) => {
+    if (onSelectSpan) onSelectSpan(span);
+    else setSelected(selected === span.id ? null : span.id);
+  };
   const rows = (items: T[], depth = 0): ReactNode =>
     items.map((span) => {
       const children = forest.children.get(span.id) ?? [];
-      const expanded = !collapsed.has(span.id);
+      const expanded = expandedIds
+        ? expandedIds.has(span.id)
+        : !collapsed.has(span.id);
       const ongoing = span.state === "open" && live;
       const finish = span.end ?? (ongoing ? end : span.start);
       const valid =
@@ -71,41 +96,50 @@ export function TraceWaterfall<T extends TraceSpan>({
         : span.end === null && !ongoing
           ? "未闭合"
           : durationLabel(finish! - span.start!);
-      const state = ongoing
-        ? running
-          ? "执行中"
-          : "等待中"
-        : span.state === "open" || span.state === "incomplete"
-          ? "未闭合"
-          : span.state === "error"
-            ? "错误"
-            : "已记录";
+      const state =
+        span.label ??
+        (ongoing
+          ? (span.running ?? running)
+            ? "执行中"
+            : "等待中"
+          : span.state === "open" || span.state === "incomplete"
+            ? "未闭合"
+            : span.state === "error"
+              ? "错误"
+              : "已记录");
       const Icon =
         span.kind === "tool" ? Wrench : span.kind === "event" ? Circle : Layers;
       return (
         <div key={span.id}>
           <div
             className="trace-row"
-            data-selected={selected === span.id}
+            data-selected={selection === span.id}
             data-kind={span.kind}
             data-state={span.state}
-            data-running={ongoing && running}
+            data-running={ongoing && (span.running ?? running)}
           >
-            <div className="trace-name" style={{ paddingLeft: 8 + depth * 16 }}>
-              {children.length ? (
+            <div
+              className="trace-name"
+              style={{ paddingLeft: 8 + (span.depth ?? depth) * 16 }}
+            >
+              {children.length || span.expandable ? (
                 <Button
                   variant="ghost"
                   size="icon-xs"
                   aria-label={`${expanded ? "折叠" : "展开"}${span.name}`}
                   aria-expanded={expanded}
-                  onClick={() =>
+                  onClick={() => {
+                    if (onToggle) {
+                      onToggle(span.id);
+                      return;
+                    }
                     setCollapsed((old) => {
                       const next = new Set(old);
                       if (next.has(span.id)) next.delete(span.id);
                       else next.add(span.id);
                       return next;
-                    })
-                  }
+                    });
+                  }}
                 >
                   {expanded ? <ChevronDown /> : <ChevronRight />}
                 </Button>
@@ -116,10 +150,8 @@ export function TraceWaterfall<T extends TraceSpan>({
                 variant="ghost"
                 className="min-w-0 justify-start"
                 aria-label={`查看记录：${span.name}`}
-                aria-pressed={selected === span.id}
-                onClick={() =>
-                  setSelected(selected === span.id ? null : span.id)
-                }
+                aria-pressed={selection === span.id}
+                onClick={() => choose(span)}
               >
                 <Icon />
                 <span className="truncate">{span.name}</span>
@@ -128,7 +160,7 @@ export function TraceWaterfall<T extends TraceSpan>({
             <button
               className="trace-track"
               aria-label={`${span.name} · ${state} · ${label}`}
-              onClick={() => setSelected(selected === span.id ? null : span.id)}
+              onClick={() => choose(span)}
             >
               {valid && (
                 <span
@@ -155,9 +187,15 @@ export function TraceWaterfall<T extends TraceSpan>({
   return (
     <section className="trace-waterfall" aria-label="执行时间瀑布图">
       <div className="trace-summary">
-        <strong>Trace</strong>
-        <span>{spans.filter((s) => s.kind === "tool").length} 次工具调用</span>
-        <span>{spans.filter((s) => s.state === "error").length} 错误</span>
+        <strong>{title}</strong>
+        {summary ?? (
+          <>
+            <span>
+              {spans.filter((s) => s.kind === "tool").length} 次工具调用
+            </span>
+            <span>{spans.filter((s) => s.state === "error").length} 错误</span>
+          </>
+        )}
         <span>观测跨度 {durationLabel(end - start)}</span>
         {statusLabel ? (
           <AnimatedValue value={statusLabel}>{statusLabel}</AnimatedValue>
@@ -168,7 +206,7 @@ export function TraceWaterfall<T extends TraceSpan>({
       <div className="trace-scroll">
         <div className="trace-grid">
           <div className="trace-axis">
-            <span>轮次 / 步骤 / 工具</span>
+            <span>{axisLabel}</span>
             <div>
               {[0, 0.25, 0.5, 0.75, 1].map((t) => (
                 <span key={t}>{durationLabel(range * t)}</span>
@@ -178,7 +216,7 @@ export function TraceWaterfall<T extends TraceSpan>({
           {rows(forest.roots)}
         </div>
       </div>
-      <AnimatedDisclosure open={!!detail}>
+      <AnimatedDisclosure open={!!detail && !!renderDetail}>
         {detail && (
           <div className="trace-detail">
             <div className="flex items-center justify-between">
@@ -191,7 +229,7 @@ export function TraceWaterfall<T extends TraceSpan>({
                 关闭记录详情
               </Button>
             </div>
-            {renderDetail(detail)}
+            {renderDetail?.(detail)}
           </div>
         )}
       </AnimatedDisclosure>

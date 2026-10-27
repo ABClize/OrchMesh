@@ -49,7 +49,7 @@ export function SidebarLayout({
               id="navigation"
               defaultSize={244}
               minSize={180}
-              maxSize="35%"
+              maxSize="320px"
             >
               {sidebar}
             </ResizablePanel>

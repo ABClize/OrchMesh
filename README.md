@@ -38,7 +38,7 @@ ORCHMESH_MODEL_API_KEY='your-model-key'
 ORCHMESH_MODEL_ID=your-model-id
 ```
 
-地址填写模型 API 基址，不包含 `/chat/completions`。`ORCHMESH_MODEL_API` 可省略，默认 `openai-completions`；其他协议必须明确配置。含 `#` 或空格的值加引号。管理员账号密码只用于首次创建；修改模型配置后重启对新任务生效。平台统一使用部署方模型凭据，不将凭据交给用户或执行容器。
+地址填写模型 API 基址，不包含 `/chat/completions`。`ORCHMESH_MODEL_API` 可省略，默认 `openai-completions`；其他协议必须明确配置。含 `#` 或空格的值加引号。管理员账号密码只用于首次创建；直接修改环境变量后需重启；日常可在管理员侧栏「模型设置」添加、编辑和测试模型，保存即时生效。平台统一使用部署方模型凭据，不将凭据交给用户或执行容器。
 
 `make setup` 自动生成本地 PostgreSQL 密码。数据库默认只监听 `127.0.0.1:5433`；外部 PostgreSQL 使用 `ORCHMESH_DATABASE_URL`。不要在数据库初始化后单独改密码变量而不更新数据库角色。
 
@@ -71,7 +71,9 @@ uv run --directory apps/server orchmesh import-legacy
 
 ## 模型、网页与邀请
 
-思考设置依据模型实际支持的等级；兼容 DeepSeek 思考协议的网关可配置：
+管理员「模型设置」支持模型名称、API 地址、密钥、接口协议、默认模型和 DSH 能力目录。密钥不回显，编辑时留空保持原值；测试连接发送独立短请求，不携带对话历史。页面保存后输入框模型列表同步更新，配置保存在仅服务账户可读写的 `.data/platform-models.json`，优先于环境变量，重启后保留。
+
+思考能力优先读取 DSH 内置模型目录；高级选项可覆盖兼容网关的差异。仍使用环境变量配置时：
 
 ```dotenv
 ORCHMESH_MODEL_REASONING_EFFORTS='{"off":null,"high":"high"}'
@@ -97,3 +99,7 @@ uv run --directory apps/server orchmesh create-user friend@example.com
 备份应同时覆盖 PostgreSQL、`.data/tasks/`、`.data/inputs/`、旧 `.data/users/` 和 JWT 密钥。日常日志见[日志说明](docs/development/logging.md)，架构见[智能体平台设计](docs/architecture/agent-platform-v1.md)。
 
 多智能体观测的后端接口及前端接入契约见 [多智能体观测接口](docs/api/multi-agent-observation.md)：调用图、子任务详情、实时 SSE 和官方日志回放。
+
+管理员可在侧栏「提示词设置」编辑内置 OrchMesh、Agent Builder、平台公共指令和任务恢复提示，或恢复默认后保存。配置仅保留当前值，存于 `.data/platform-prompts.json`；新任务读取设置，已接收任务使用冻结快照。提示词不会更改后端工具权限或发布确认规则。
+
+在「协作 → 调用详情 → 最终提示词」只读查看自己任务最近一次 DSH 模型请求的系统分段、来源、完整系统消息、动态上下文、实际恢复消息和工具定义。记录来自 DSH 官方组装/请求事件，保存在任务私有目录，不是当前设置的推算预览；旧任务无记录时明确显示缺失，不补造历史。查看入口仅管理员可用，不包含供应商内部追加内容。

@@ -1,3 +1,4 @@
+import { installPromptObservation } from "./prompt-observation.mjs";
 // Platform composition: the official DSH loop and persistence remain authoritative.
 import { installProxyFromEnvironment } from "@deepseek-ai/dsh-http-proxy";
 import { Context } from "@deepseek-ai/cordis";
@@ -23,6 +24,7 @@ import Web from "@deepseek-ai/dsh-web";
 import * as ToolWeb from "@deepseek-ai/dsh-tool-web";
 import * as FetchHttp from "@deepseek-ai/dsh-web-fetch-http";
 import * as SearchDeepSeek from "@deepseek-ai/dsh-web-search-deepseek";
+import { modelRoute } from "./model-route.mjs";
 import { mountRemote } from "./task-remote.mjs";
 const lines = createInterface({ input: process.stdin });
 const pending = new Map();
@@ -72,13 +74,10 @@ try {
     name: "platform-prompt",
     inject: ["systemPrompt"],
     apply(c, options) {
-      c.effect(() =>
-        c.systemPrompt.section({
-          name: "platform-definition",
-          order: 10,
-          text: options.text,
-        }),
-      );
+      for (const [index, part] of options.parts.entries())
+        c.effect(() => c.systemPrompt.section({
+          name: part.name, order: 10 + index, text: part.text, interpolate: false,
+        }));
     },
   };
   for (const p of [Llm, Sessions, Projection, Prompt, Tools, Agents])
@@ -111,24 +110,7 @@ try {
     { global: true },
   );
   process.env.ORCHMESH_TASK_MODEL_KEY = config.key;
-  await ctx.plugin(PiAI, {
-    providers: {
-      project: {
-        baseURL: config.model.base_url,
-        api: config.model.api,
-        apiKeyEnv: "ORCHMESH_TASK_MODEL_KEY",
-        models: [
-          {
-            id: config.model.id,
-            ...(config.model.compat ? { compat: config.model.compat } : {}),
-            ...(config.model.efforts
-              ? { reasoningEfforts: config.model.efforts }
-              : {}),
-          },
-        ],
-      },
-    },
-  });
+  await ctx.plugin(PiAI, { providers: modelRoute(config.model) });
   if (config.web) {
     await ctx.plugin(Web);
     await ctx.plugin(FetchHttp);
@@ -146,7 +128,7 @@ try {
   await ctx.agentPresets.register({
     id: config.version,
     plugins: [
-      { name: "cordis:platformPrompt", config: { text: config.system } },
+      { name: "cordis:platformPrompt", config: { parts: config.promptParts } },
     ],
   });
   if (config.remote) await mountRemote(ctx, config.remote);
@@ -182,6 +164,7 @@ try {
     },
     { global: true },
   );
+  installPromptObservation(ctx, config);
   const known = await ctx.sessionPersistence.list();
   const resumed = known.some((row) => row.header.id === config.task);
   let completed = false;
@@ -203,7 +186,7 @@ try {
   }
   if (config.continue && config.recovered?.length) completed = false;
   const options = {
-    provider: "project",
+    provider: config.model.provider ?? "project",
     model: config.model.id,
     ...(config.reasoning !== "default"
       ? { reasoningEffort: config.reasoning }
@@ -254,7 +237,7 @@ try {
               {
                 type: "text",
                 text: continuing
-                  ? "Continue the saved task. Check existing results before repeating any operation with an unknown outcome. The temporary execution environment is available if configured. Use list_agent_tasks to check collaborator status and get_task_result only when you need its output."
+                  ? config.continuationPrompt
                   : config.prompt,
               },
             ],

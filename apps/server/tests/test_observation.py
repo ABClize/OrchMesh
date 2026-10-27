@@ -243,3 +243,19 @@ async def test_running_worker_with_other_pending_questions_remains_executing(app
             assert observation.node(task, []).activity == "waiting_user"
         finally:
             app.state.manager.live.pop(root, None)
+
+
+async def test_lifecycle_end_is_explicit_and_not_estimated(app):
+    client = await authenticated(app)
+    async with aclosing(client):
+        cid, root, child = await seed(app, client)
+        async with app.state.db.sessions.begin() as session:
+            task = await session.get(Task, child)
+            task.status = "completed"
+            task.finished_at = "2026-10-27T01:00:00+00:00"
+        graph = (await client.get(f"/api/conversations/{cid}/graph")).json()
+        calls = {call["id"]: call for call in graph["calls"]}
+        assert calls[child]["finished_at"] == "2026-10-27T01:00:00+00:00"
+        assert calls[root]["finished_at"] is None
+        detail = (await client.get(f"/api/tasks/{child}")).json()
+        assert detail["finished_at"] == calls[child]["finished_at"]

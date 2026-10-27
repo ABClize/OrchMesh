@@ -5,6 +5,210 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/settings/models": {
+      "get": {
+        "tags": [
+          "model-settings"
+        ],
+        "summary": "List Models",
+        "operationId": "list_models_api_settings_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response List Models Api Settings Models Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "model-settings"
+        ],
+        "summary": "Save",
+        "operationId": "save_api_settings_models_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Save Api Settings Models Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/settings/models/probe": {
+      "post": {
+        "tags": [
+          "model-settings"
+        ],
+        "summary": "Probe",
+        "operationId": "probe_api_settings_models_probe_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "test",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Test"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Probe Api Settings Models Probe Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/prompts": {
+      "get": {
+        "tags": [
+          "prompt-settings"
+        ],
+        "summary": "Get",
+        "operationId": "get_api_settings_prompts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptCatalog"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "prompt-settings"
+        ],
+        "summary": "Save",
+        "operationId": "save_api_settings_prompts_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptCatalog"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/login/access-token": {
       "post": {
         "tags": [
@@ -1147,6 +1351,55 @@
         }
       }
     },
+    "/api/tasks/{task_id}/effective-prompt": {
+      "get": {
+        "tags": [
+          "Observation"
+        ],
+        "summary": "Effective Prompt",
+        "operationId": "effective_prompt_api_tasks__task_id__effective_prompt_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Effective Prompt Api Tasks  Task Id  Effective Prompt Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks/{task_id}/history": {
       "get": {
         "tags": [
@@ -1535,6 +1788,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Conversation",
+        "operationId": "delete_conversation_api_conversations__conversation_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Conversation Api Conversations  Conversation Id  Delete"
                 }
               }
             }
@@ -2318,6 +2617,17 @@
             "type": "string",
             "title": "Reasoning"
           },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
           "project_id": {
             "anyOf": [
               {
@@ -2565,6 +2875,117 @@
         ],
         "title": "MemorySettings"
       },
+      "ModelWrite": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_.-]+$",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id"
+          },
+          "base_url": {
+            "type": "string",
+            "title": "Base Url"
+          },
+          "api_key": {
+            "type": "string",
+            "format": "password",
+            "title": "Api Key",
+            "default": "",
+            "writeOnly": true
+          },
+          "api": {
+            "type": "string",
+            "enum": [
+              "openai-completions",
+              "openai-responses",
+              "anthropic-messages"
+            ],
+            "title": "Api",
+            "default": "openai-completions"
+          },
+          "reasoning_efforts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Efforts"
+          },
+          "thinking_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "deepseek"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking Format"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "default": "project"
+          },
+          "supported_efforts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supported Efforts"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision",
+            "default": "environment"
+          },
+          "make_default": {
+            "type": "boolean",
+            "title": "Make Default",
+            "default": false
+          },
+          "creating": {
+            "type": "boolean",
+            "title": "Creating",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "id",
+          "base_url"
+        ],
+        "title": "ModelWrite"
+      },
       "ObservedEvent": {
         "properties": {
           "id": {
@@ -2653,6 +3074,82 @@
         ],
         "title": "Prompt"
       },
+      "PromptCatalog": {
+        "properties": {
+          "prompts": {
+            "$ref": "#/components/schemas/Prompts"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/Prompts"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompts",
+          "defaults",
+          "revision"
+        ],
+        "title": "PromptCatalog"
+      },
+      "PromptWrite": {
+        "properties": {
+          "prompts": {
+            "$ref": "#/components/schemas/Prompts"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prompts",
+          "revision"
+        ],
+        "title": "PromptWrite"
+      },
+      "Prompts": {
+        "properties": {
+          "continuation": {
+            "type": "string",
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Continuation"
+          },
+          "assistant": {
+            "type": "string",
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Assistant"
+          },
+          "builder": {
+            "type": "string",
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Builder"
+          },
+          "platform": {
+            "type": "string",
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Platform"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "continuation",
+          "assistant",
+          "builder",
+          "platform"
+        ],
+        "title": "Prompts"
+      },
       "Publication": {
         "properties": {
           "confirm": {
@@ -2688,15 +3185,33 @@
       "ReasoningPreference": {
         "properties": {
           "reasoning": {
-            "type": "string",
-            "maxLength": 32,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Reasoning"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
-        "required": [
-          "reasoning"
-        ],
         "title": "ReasoningPreference"
       },
       "RunRead": {
@@ -2851,6 +3366,17 @@
             "type": "string",
             "title": "Created At"
           },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
           "error": {
             "anyOf": [
               {
@@ -2996,6 +3522,17 @@
           "created_at": {
             "type": "string",
             "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
           },
           "error": {
             "anyOf": [

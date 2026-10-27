@@ -45,9 +45,23 @@ export async function sendPrompt(
 export function createDraftSender(projectId: string | null = null) {
   let conversation: string | null = null;
   const session = getToken();
-  return async (text: string, reviewTools = false) => {
+  return async (
+    text: string,
+    reviewTools = false,
+    reasoning = "default",
+    modelId?: string,
+  ) => {
     if (getToken() !== session) throw new Error("登录状态已改变，请重新登录。");
     conversation ??= (await createConversation(projectId)).id;
+    if (getToken() !== session) throw new Error("登录状态已改变，请重新登录。");
+    const preference = await api.PUT(
+      "/api/conversations/{conversation_id}/reasoning",
+      {
+        params: { path: { conversation_id: conversation } },
+        body: { reasoning, ...(modelId ? { model_id: modelId } : {}) },
+      },
+    );
+    if (preference.error) throw new Error("保存思考设置失败，请重试。");
     if (getToken() !== session) throw new Error("登录状态已改变，请重新登录。");
     await sendPrompt(conversation, text, reviewTools);
     return conversation;

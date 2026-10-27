@@ -1,3 +1,6 @@
+import { useAuth } from "@/features/auth/useAuth";
+import { EffectivePrompt } from "./EffectivePrompt";
+import { executionSpans } from "./traceModel";
 import { Clock3, FileText, ListTree, MessageSquare } from "lucide-react";
 import { ObservationStatus } from "./ObservationStatus";
 import { Button } from "@/components/ui/button";
@@ -9,20 +12,28 @@ import { formatTime, pendingDependencies, type Call } from "./model";
 import { FeedNotice, LoadingObservation } from "./Feedback";
 import { TaskQuestions } from "./TaskQuestions";
 import { TaskOutput } from "./TaskOutput";
-import { ExecutionHistory } from "./ExecutionHistory";
+import { ExecutionHistory, ExecutionRecordDetail } from "./ExecutionHistory";
 export function CallInspector({
   taskId,
   calls,
   readOnly,
   onSelect,
+  selectedRecord,
 }: {
+  selectedRecord?: import("./traceModel").ExecutionSpan;
   taskId: string;
   calls: Call[];
   readOnly: boolean;
   onSelect: (id: string) => void;
 }) {
+  const { me } = useAuth();
   const feed = useTaskObservation(taskId);
   const task = feed.data;
+  const focusedRecord = selectedRecord
+    ? (executionSpans(feed.history).find(
+        (span) => span.id === selectedRecord.id,
+      ) ?? selectedRecord)
+    : undefined;
   const waitingFor = task ? pendingDependencies(task, calls) : [];
   return (
     <section
@@ -59,6 +70,15 @@ export function CallInspector({
               创建于 {formatTime(task.created_at)}
             </p>
           </div>
+          {focusedRecord && (
+            <section aria-label="所选执行记录" className="trace-detail">
+              <strong>{focusedRecord.name}</strong>
+              <ExecutionRecordDetail
+                span={focusedRecord}
+                onSelectTask={onSelect}
+              />
+            </section>
+          )}
           {task.activity === "resuming_or_transitioning" && (
             <p className="text-sm text-muted-foreground">
               暂时没有实时输出，正在等待执行状态更新。
@@ -104,7 +124,15 @@ export function CallInspector({
                 <FileText aria-hidden="true" />
                 文件
               </TabsTrigger>
+              {me.data?.is_superuser && (
+                <TabsTrigger value="prompt">最终提示词</TabsTrigger>
+              )}
             </TabsList>
+            {me.data?.is_superuser && (
+              <TabsContent value="prompt">
+                <EffectivePrompt taskId={taskId} />
+              </TabsContent>
+            )}
             <TabsContent value="output">
               <TaskOutput task={task} />
             </TabsContent>

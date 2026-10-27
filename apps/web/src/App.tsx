@@ -1,8 +1,10 @@
+import { PromptSettings } from "@/features/settings/PromptSettings";
+import { ModelSettings } from "@/features/models/ModelSettings";
+import { ThemeToggle } from "@/features/workspace/ThemeToggle";
 import { ContextLibrary } from "@/features/platform/ContextLibrary";
 import { Library } from "@/features/platform/Library";
 import { platformRequest } from "@/lib/platform";
 import { Navigation } from "@/features/conversations/Navigation";
-import { ReasoningSettings } from "@/features/chat/ReasoningSettings";
 import { SidebarLayout } from "@/features/workspace/SidebarLayout";
 import { Workbench } from "@/features/workspace/Workbench";
 import { useFiles } from "@/features/workspace/files";
@@ -15,6 +17,11 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  Settings2,
+  MessageSquare,
+  Bot,
+  BookOpen,
+  PanelRight,
   LogOut,
   Layers,
   PanelLeft,
@@ -62,8 +69,12 @@ const queryClient = new QueryClient({
 function Workspace() {
   const query = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
-  const [page, setPage] = useState<"chat" | "agents" | "context">("chat");
-  function navigate(value: "chat" | "agents" | "context") {
+  const [page, setPage] = useState<
+    "chat" | "agents" | "context" | "models" | "prompts"
+  >("chat");
+  function navigate(
+    value: "chat" | "agents" | "context" | "models" | "prompts",
+  ) {
     setPage(value);
     setShowConversations(false);
     useFiles.getState().close();
@@ -234,6 +245,7 @@ function Workspace() {
                 <Layers aria-hidden="true" />
               </span>
               <span>OrchMesh</span>
+              <ThemeToggle />
               <Button
                 variant="ghost"
                 size="icon"
@@ -263,6 +275,7 @@ function Workspace() {
                 className="justify-start"
                 onClick={() => navigate("chat")}
               >
+                <MessageSquare />
                 对话工作空间
               </Button>
               <Button
@@ -270,6 +283,7 @@ function Workspace() {
                 className="justify-start"
                 onClick={() => navigate("agents")}
               >
+                <Bot />
                 智能体库
               </Button>
               <Button
@@ -277,8 +291,29 @@ function Workspace() {
                 className="justify-start"
                 onClick={() => navigate("context")}
               >
+                <BookOpen />
                 知识与记忆
               </Button>
+              {me.data?.is_superuser && (
+                <Button
+                  variant={page === "models" ? "secondary" : "ghost"}
+                  className="justify-start"
+                  onClick={() => navigate("models")}
+                >
+                  <Settings2 />
+                  模型设置
+                </Button>
+              )}
+              {me.data?.is_superuser && (
+                <Button
+                  variant={page === "prompts" ? "secondary" : "ghost"}
+                  className="justify-start"
+                  onClick={() => navigate("prompts")}
+                >
+                  <Settings2 />
+                  提示词设置
+                </Button>
+              )}
             </nav>
             <Navigation
               archived={showArchived}
@@ -366,25 +401,19 @@ function Workspace() {
                 <PanelLeft />
               </Button>
               <span className="min-w-0 flex-1 truncate">
-                {page === "agents"
-                  ? "智能体库"
-                  : page === "context"
-                    ? "知识与记忆"
-                    : id
-                      ? (conversations.data?.find((c) => c.id === id)?.title ??
-                        "新对话")
-                      : "工作空间"}
+                {page === "prompts"
+                  ? "提示词设置"
+                  : page === "models"
+                    ? "模型设置"
+                    : page === "agents"
+                      ? "智能体库"
+                      : page === "context"
+                        ? "知识与记忆"
+                        : id
+                          ? (conversations.data?.find((c) => c.id === id)
+                              ?.title ?? "新对话")
+                          : "工作空间"}
               </span>
-              {id && page === "chat" && (
-                <ReasoningSettings
-                  id={id}
-                  value={
-                    conversations.data?.find((c) => c.id === id)?.reasoning ??
-                    "default"
-                  }
-                  running={running}
-                />
-              )}
               {page === "chat" && (
                 <Button
                   variant="outline"
@@ -396,7 +425,8 @@ function Workspace() {
                       : useFiles.getState().show()
                   }
                 >
-                  文件
+                  <PanelRight />
+                  详情与文件
                 </Button>
               )}
             </header>
@@ -427,6 +457,8 @@ function Workspace() {
               />
             )}
             {page === "context" && <ContextLibrary />}
+            {page === "models" && me.data?.is_superuser && <ModelSettings />}
+            {page === "prompts" && me.data?.is_superuser && <PromptSettings />}
             <div
               hidden={page !== "chat"}
               className="chat-page min-h-0 flex-1 flex-col"
@@ -441,6 +473,8 @@ function Workspace() {
                       )
                     }
                     id={id}
+                    reasoning={currentConversation?.reasoning ?? "default"}
+                    modelId={currentConversation?.model_id}
                     archived={!!currentConversation?.archived}
                     active={page === "chat"}
                     onUnauthorized={clearSession}

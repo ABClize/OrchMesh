@@ -30,6 +30,7 @@ class ConversationRead(BaseModel):
     id: str
     title: str
     reasoning: str
+    model_id: str | None = None
     project_id: uuid.UUID | None
     directory_id: uuid.UUID | None
     pinned: bool
@@ -51,7 +52,9 @@ class ConversationUpdate(BaseModel):
 
 
 class ReasoningPreference(BaseModel):
-    reasoning: str = Field(max_length=32)
+    model_config = ConfigDict(extra="forbid")
+    reasoning: str | None = Field(default=None, max_length=32)
+    model_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class QuestionAnswer(BaseModel):
@@ -80,9 +83,11 @@ class Snapshot(BaseModel):
 
 
 def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
+    from .model_settings import router as model_settings_router
     from .platform.catalog import router as catalog_router
     from .platform.engine import ACTIVE, Engine
     from .platform.protocol import Protocol
+    from .prompt_settings import router as prompt_settings_router
     from .storage import Project, Task
 
     settings = settings or Settings()
@@ -107,7 +112,24 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
                     await db.engine.dispose()
 
     app = FastAPI(title="OrchMesh", lifespan=lifespan, openapi_url="/api/openapi.json")
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request, error):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": [
+                    {key: item[key] for key in ("loc", "msg", "type")}
+                    for item in error.errors()
+                ]
+            },
+        )
+
     app.state.db, app.state.manager, app.state.auth = db, manager, auth
+    app.include_router(model_settings_router(settings, auth, db))
+    app.include_router(prompt_settings_router(settings, auth))
     app.include_router(auth.router)
     app.include_router(workspace_router(settings, auth, db))
     app.include_router(catalog_router(auth, db))
@@ -146,6 +168,7 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
             "id": conversation.id,
             "title": conversation.title,
             "reasoning": conversation.reasoning,
+            "model_id": conversation.model_id,
             "project_id": conversation.directory_id,
             "directory_id": conversation.directory_id,
             "pinned": conversation.pinned,
@@ -212,12 +235,51 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
         body: ConversationUpdate,
         user: Annotated[User, Depends(auth.current_user)],
     ):
-        await owned(conversation_id, user)
         async with db.sessions.begin() as session:
-            value = await session.get(Conversation, conversation_id)
+            value = await session.scalar(
+                select(Conversation)
+                .where(
+                    Conversation.id == conversation_id, Conversation.user_id == user.id
+                )
+                .with_for_update()
+            )
+            if value is None:
+                raise HTTPException(404, "Conversation not found")
+            if body.archived and await session.scalar(
+                select(Task.id)
+                .where(Task.conversation_id == conversation_id, Task.status.in_(ACTIVE))
+                .limit(1)
+            ):
+                raise HTTPException(409, "Stop active tasks before archiving")
             for key, item in body.model_dump(exclude_none=True).items():
                 setattr(value, key, item.strip() if isinstance(item, str) else item)
         return read(value)
+
+    @app.delete("/api/conversations/{conversation_id}")
+    async def delete_conversation(
+        conversation_id: str, user: Annotated[User, Depends(auth.current_user)]
+    ) -> dict[str, str]:
+        async with db.sessions.begin() as session:
+            value = await session.scalar(
+                select(Conversation)
+                .where(
+                    Conversation.id == conversation_id, Conversation.user_id == user.id
+                )
+                .with_for_update()
+            )
+            if value is None:
+                raise HTTPException(404, "Conversation not found")
+            if not value.archived:
+                raise HTTPException(409, "Archive conversation before deleting")
+            if await session.scalar(
+                select(Task.id)
+                .where(Task.conversation_id == conversation_id, Task.status.in_(ACTIVE))
+                .limit(1)
+            ):
+                raise HTTPException(409, "Stop active tasks before deleting")
+            # Execution audit and delivered files have independent ownership.
+            await session.delete(value)
+        return {"status": "deleted"}
 
     @app.post(
         "/api/conversations/{conversation_id}/fork",
@@ -235,6 +297,7 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
             title=source.title + " · 继续",
             directory_id=source.directory_id,
             reasoning=source.reasoning,
+            model_id=source.model_id,
             legacy_messages=state["messages"],
             agent_id=source.agent_id,
         )
@@ -244,13 +307,17 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
 
     @app.get("/api/model")
     async def model(user: Annotated[User, Depends(auth.current_user)]) -> dict:
+        profiles = settings.model_profiles()
+        default = settings.resolve_model().key if profiles else None
         return {
-            "id": settings.model_id,
-            "name": settings.model_id,
-            "provider": "project",
-            "efforts": [
-                {"id": key, "label": key}
-                for key in (settings.model_reasoning_efforts or {})
+            "default_model": default,
+            "models": [
+                {
+                    "id": p.key,
+                    "name": p.name,
+                    "efforts": [{"id": key, "label": key} for key in p.effort_ids],
+                }
+                for p in profiles
             ],
         }
 
@@ -264,14 +331,41 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
         user: Annotated[User, Depends(auth.current_user)],
     ):
         await owned(conversation_id, user)
-        if body.reasoning != "default" and body.reasoning not in (
-            settings.model_reasoning_efforts or {}
-        ):
-            raise HTTPException(422, "Unsupported reasoning level")
         async with db.sessions.begin() as session:
-            value = await session.get(Conversation, conversation_id)
-            assert value is not None
-            value.reasoning = body.reasoning
+            value = await session.scalar(
+                select(Conversation)
+                .where(
+                    Conversation.id == conversation_id, Conversation.user_id == user.id
+                )
+                .with_for_update()
+            )
+            if value is None:
+                raise HTTPException(404, "Conversation not found")
+            if (
+                value.archived
+                or value.legacy
+                or await session.scalar(
+                    select(Task.id)
+                    .where(
+                        Task.conversation_id == conversation_id, Task.status.in_(ACTIVE)
+                    )
+                    .limit(1)
+                )
+            ):
+                raise HTTPException(409, "Conversation settings are read-only")
+            try:
+                selected = settings.resolve_model(body.model_id or value.model_id)
+            except ValueError as error:
+                raise HTTPException(422, str(error)) from error
+            effort = body.reasoning if body.reasoning is not None else value.reasoning
+            if effort != "default" and effort not in selected.effort_ids:
+                if body.reasoning is not None:
+                    raise HTTPException(
+                        422, "Unsupported reasoning level for selected model"
+                    )
+                effort = "default"
+            value.model_id = selected.key
+            value.reasoning = effort
         return read(value)
 
     async def snapshot_for(conversation):

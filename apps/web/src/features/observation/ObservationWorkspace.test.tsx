@@ -119,6 +119,10 @@ test("a single call still waits for explicit expansion", () => {
 test("tree selects real task IDs and folding a selected descendant closes details", () => {
   viewport.desktop = true;
   render(<Workspace />);
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "调用树" }), {
+    button: 0,
+    ctrlKey: false,
+  });
   fireEvent.click(
     screen.getByRole("button", { name: "查看调用：助手 · d-task" }),
   );
@@ -132,4 +136,21 @@ test("tree selects real task IDs and folding a selected descendant closes detail
   expect(
     screen.getByRole("button", { name: "查看调用：助手 · d-task" }),
   ).toBeTruthy();
+});
+
+test("desktop defaults to every agent lifecycle without loading tools", () => {
+  viewport.desktop = true;
+  render(<Workspace />);
+  expect(
+    screen
+      .getByRole("tab", { name: "全链路瀑布图" })
+      .getAttribute("aria-selected"),
+  ).toBe("true");
+  expect(
+    screen.getAllByRole("button", { name: /^查看记录：助手/ }),
+  ).toHaveLength(2);
+  fireEvent.click(
+    screen.getByRole("button", { name: "查看记录：助手 · d-task" }),
+  );
+  expect(screen.getByLabelText("测试调用详情").textContent).toBe("child-task");
 });

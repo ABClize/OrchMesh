@@ -37,13 +37,13 @@ export function Workbench({
   return (
     <div className="workbench min-w-0 flex-1">
       <ResizablePanelGroup orientation="horizontal">
-        <ResizablePanel id="chat" minSize="35%" defaultSize="55%">
+        <ResizablePanel id="chat" minSize="35%" defaultSize="65%">
           {children}
         </ResizablePanel>
         {desktop && open && (
           <>
             <ResizableHandle withHandle aria-label="调整聊天与工作区宽度" />
-            <ResizablePanel id="files" minSize="30%" defaultSize="45%">
+            <ResizablePanel id="files" minSize="300px" defaultSize="35%">
               {conversationId ? (
                 <ConversationFiles key={conversationId} id={conversationId} />
               ) : (

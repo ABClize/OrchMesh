@@ -38,36 +38,48 @@ export function ExecutionHistory({
       running={running}
       statusLabel={activity ? activityLabel(activity) : undefined}
       renderDetail={(span) => (
-        <div className="flex flex-col gap-2">
-          {collaborationOperation(span) && (
-            <p className="text-sm text-muted-foreground">
-              {collaborationOperation(span)}
-            </p>
-          )}
-          {onSelectTask &&
-            spanTaskIds(span).map((id) => (
-              <Button
-                key={id}
-                variant="link"
-                className="justify-start"
-                onClick={() => onSelectTask(id)}
-              >
-                查看协作调用 · {id.slice(-6)}
-              </Button>
-            ))}
-          {span.events.map((event) => (
-            <details key={event.seq}>
-              <summary className="cursor-pointer py-2">
-                {event.type} · #{event.seq} ·{" "}
-                {new Date(event.time).toLocaleTimeString("zh-CN")}
-              </summary>
-              <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-                {JSON.stringify(event.data, null, 2)}
-              </pre>
-            </details>
-          ))}
-        </div>
+        <ExecutionRecordDetail span={span} onSelectTask={onSelectTask} />
       )}
     />
+  );
+}
+
+export function ExecutionRecordDetail({
+  span,
+  onSelectTask,
+}: {
+  span: import("./traceModel").ExecutionSpan;
+  onSelectTask?: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {collaborationOperation(span) && (
+        <p className="text-sm text-muted-foreground">
+          {collaborationOperation(span)}
+        </p>
+      )}
+      {onSelectTask &&
+        spanTaskIds(span).map((id) => (
+          <Button
+            key={id}
+            variant="link"
+            className="justify-start"
+            onClick={() => onSelectTask(id)}
+          >
+            查看协作调用 · {id.slice(-6)}
+          </Button>
+        ))}
+      {span.events.map((event) => (
+        <details key={event.seq}>
+          <summary className="cursor-pointer py-2">
+            {event.type} · #{event.seq} ·{" "}
+            {new Date(event.time).toLocaleTimeString("zh-CN")}
+          </summary>
+          <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
+            {JSON.stringify(event.data, null, 2)}
+          </pre>
+        </details>
+      ))}
+    </div>
   );
 }

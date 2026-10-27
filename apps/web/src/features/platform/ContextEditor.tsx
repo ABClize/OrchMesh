@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button-clean";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -24,8 +24,8 @@ export function ContextEditor({
   row,
   onSaved,
 }: {
-  kind: string;
-  row: Item;
+  kind: "memory" | "knowledge";
+  row?: Item;
   onSaved: () => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(false);
@@ -33,11 +33,28 @@ export function ContextEditor({
   const [error, setError] = useState("");
   return (
     <>
-      <Button onClick={() => setOpen(true)}>编辑</Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+      <Button
+        variant={row ? "outline" : "default"}
+        size="sm"
+        onClick={() => {
+          setError("");
+          setOpen(true);
+        }}
+      >
+        {row ? "编辑" : `添加${kind === "memory" ? "记忆" : "知识"}`}
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={(value) => {
+          if (!busy) setOpen(value);
+        }}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>编辑{kind === "memory" ? "记忆" : "知识"}</DialogTitle>
+            <DialogTitle>
+              {row ? "编辑" : "添加"}
+              {kind === "memory" ? "记忆" : "知识"}
+            </DialogTitle>
             <DialogDescription>
               修改影响后续任务，已发布智能体的知识快照保持不变。
             </DialogDescription>
@@ -50,11 +67,17 @@ export function ContextEditor({
               setBusy(true);
               setError("");
               try {
-                await platformRequest(`/context/${kind}/${row.id}`, "PUT", {
-                  ...row,
-                  title: String(data.get("title") || ""),
-                  content: String(data.get("content")),
-                });
+                await platformRequest(
+                  row
+                    ? `/context/${kind}/${row?.id ?? "new"}`
+                    : `/context/${kind}`,
+                  row ? "PUT" : "POST",
+                  {
+                    ...row,
+                    title: String(data.get("title") || ""),
+                    content: String(data.get("content")),
+                  },
+                );
                 await onSaved();
                 setOpen(false);
               } catch (cause) {
@@ -67,28 +90,43 @@ export function ContextEditor({
             <FieldGroup>
               {kind === "knowledge" && (
                 <Field>
-                  <FieldLabel htmlFor={`edit-title-${row.id}`}>标题</FieldLabel>
+                  <FieldLabel htmlFor={`edit-title-${row?.id ?? "new"}`}>
+                    标题
+                  </FieldLabel>
                   <Input
-                    id={`edit-title-${row.id}`}
+                    id={`edit-title-${row?.id ?? "new"}`}
                     name="title"
-                    defaultValue={row.title}
+                    defaultValue={row?.title ?? ""}
                     required
                   />
                 </Field>
               )}
               <Field>
-                <FieldLabel htmlFor={`edit-content-${row.id}`}>内容</FieldLabel>
+                <FieldLabel htmlFor={`edit-content-${row?.id ?? "new"}`}>
+                  内容
+                </FieldLabel>
                 <Textarea
-                  id={`edit-content-${row.id}`}
+                  id={`edit-content-${row?.id ?? "new"}`}
                   name="content"
-                  defaultValue={row.content}
+                  defaultValue={row?.content ?? ""}
+                  className="min-h-40"
                   maxLength={32000}
                   required
                 />
               </Field>
-              <Button type="submit" disabled={busy}>
-                保存
-              </Button>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setOpen(false)}
+                >
+                  取消
+                </Button>
+                <Button type="submit" disabled={busy}>
+                  {busy ? "保存中…" : "保存"}
+                </Button>
+              </div>
             </FieldGroup>
           </form>
         </DialogContent>

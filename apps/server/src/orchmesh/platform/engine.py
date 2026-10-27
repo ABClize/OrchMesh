@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,7 @@ from ..config import Settings
 from ..dsh.events import Adapter, history
 from ..dsh.messages import Messages
 from ..logging import logger
+from ..prompt_settings import DEFAULTS, read_prompts
 from ..storage import (
     AgentDefinition,
     AgentVersion,
@@ -76,6 +78,7 @@ async def publish(task_id: str, result: dict) -> None:
             task.error = result.get("error")
             task.revision += 1
             if task.status in ("completed", "failed"):
+                task.finished_at = task.finished_at or datetime.now(UTC).isoformat()
                 await session.execute(
                     delete(TaskWait).where(TaskWait.waiter_id == task.id)
                 )
@@ -90,6 +93,7 @@ async def mark_failed(task_id: str):
         task = await require_record(session, Task, task_id)
         if task.status != "stopped":
             task.status = "failed"
+            task.finished_at = task.finished_at or datetime.now(UTC).isoformat()
             task.error = "Task execution failed. Saved session and files are retained."
     protocol = engine().protocol
     if protocol is not None:
@@ -159,7 +163,7 @@ class Engine:
         a2a_id: str | None = None,
         a2a_context: str | None = None,
     ) -> str:
-        async with self.db.sessions.begin() as session:
+        async with self.settings._model_lock, self.db.sessions.begin() as session:
             # Conversation row lock also serializes identical request
             # IDs and history heads.
             conversation = await session.scalar(
@@ -171,6 +175,8 @@ class Engine:
             )
             if conversation is None:
                 raise HTTPException(404, "Conversation not found")
+            if conversation.archived or conversation.legacy:
+                raise HTTPException(409, "Conversation is read-only")
             if parent:
                 current_parent = await require_record(session, Task, parent.id)
                 if (
@@ -200,16 +206,10 @@ class Engine:
                 raise HTTPException(
                     409, "A task is already active in this conversation"
                 )
+            prompts = read_prompts(self.settings)
             version_id, definition = (
                 "assistant-v1",
-                {
-                    "name": "OrchMesh",
-                    "instructions": (
-                        "Help the user. Discover suitable published agents and "
-                        "delegate distinct work. Never duplicate work already "
-                        "delegated in this root task."
-                    ),
-                },
+                {"name": "OrchMesh", "instructions": prompts.assistant},
             )
             selected = agent_id or conversation.agent_id
             if selected:
@@ -238,16 +238,7 @@ class Engine:
                     )
                     version_id, definition = version.id, version.definition
             if conversation.creator:
-                definition = {
-                    "name": "Agent Builder",
-                    "instructions": (
-                        "Interview the user to clarify a reusable agent's "
-                        "responsibility, tools, knowledge and behavior. Ask focused "
-                        "questions using ask_user_question. Create or update a draft "
-                        "only after clarifying requirements. Never publish: the user "
-                        "must explicitly confirm publication in the interface."
-                    ),
-                }
+                definition = {"name": "Agent Builder", "instructions": prompts.builder}
                 version_id = "builder-v1"
             previous = list(
                 (
@@ -300,6 +291,21 @@ class Engine:
                         ],
                     }
                 ]
+            try:
+                if parent:
+                    model_snapshot = dict(parent.model)
+                else:
+                    profile = self.settings.resolve_model(conversation.model_id)
+                    if (
+                        conversation.reasoning != "default"
+                        and conversation.reasoning not in profile.effort_ids
+                    ):
+                        raise ValueError(
+                            "Selected reasoning level is no longer supported"
+                        )
+                    model_snapshot = profile.snapshot(conversation.reasoning)
+            except ValueError as error:
+                raise HTTPException(422, str(error)) from error
             task_id = str(uuid.uuid4())
             task = Task(
                 id=task_id,
@@ -311,17 +317,11 @@ class Engine:
                 agent_id=selected,
                 version_id=version_id,
                 definition=definition,
+                platform_prompt=prompts.platform,
+                continuation_prompt=prompts.continuation,
                 prompt=prompt,
                 context=context,
-                model={
-                    "base_url": self.settings.model_base_url,
-                    "api": self.settings.model_api,
-                    "id": self.settings.model_id,
-                    "compat": {"thinkingFormat": self.settings.model_thinking_format}
-                    if self.settings.model_thinking_format
-                    else None,
-                    "efforts": self.settings.model_reasoning_efforts,
-                },
+                model=model_snapshot,
                 a2a_id=a2a_id,
                 a2a_context=a2a_context,
             )
@@ -426,35 +426,36 @@ class Engine:
                     shutil.copyfile(item.path, target)
             remote, overrides = await self.sandboxes.start(task_id)
             environment.update(overrides)
-        system = json.dumps(
+        system_data = {
+            "definition": task.definition,
+            "task_prompt": task.prompt,
+            "conversation_history": task.context,
+            "user_memory": [m.content for m in memories],
+            "collaboration": [
+                {
+                    "id": t.id,
+                    "parent": t.parent_id,
+                    "agent": t.agent_id,
+                    "task": t.prompt,
+                    "status": t.status,
+                }
+                for t in peers
+            ],
+        }
+        prompt_parts = [
             {
-                "definition": task.definition,
-                "task_prompt": task.prompt,
-                "conversation_history": task.context,
-                "user_memory": [m.content for m in memories],
-                "collaboration": [
-                    {
-                        "id": t.id,
-                        "parent": t.parent_id,
-                        "agent": t.agent_id,
-                        "task": t.prompt,
-                        "status": t.status,
-                    }
-                    for t in peers
-                ],
-            },
-            ensure_ascii=False,
-        )
-        system += (
-            " Use request_execution before code or filesystem work. After"
-            " it completes, continue using the official remote tools. Use"
-            " present to deliver files. Verify unknown tool outcomes "
-            "before repeating effects. Never claim a tool succeeded "
-            "without evidence. For independent collaborators use start_agent_task "
-            "for each assignment first; these return immediately. Continue your own "
-            "work, then use wait_for_tasks (any/all) for status only "
-            "and get_task_result to read outputs before your "
-            "final summary. delegate_task is only the legacy blocking alternative."
+                "name": "orchmesh-" + key,
+                "text": json.dumps({key: value}, ensure_ascii=False),
+            }
+            for key, value in system_data.items()
+        ]
+        prompt_parts.append(
+            {
+                "name": "orchmesh-platform",
+                "text": task.platform_prompt
+                if task.platform_prompt is not None
+                else DEFAULTS.platform,
+            }
         )
         specs = definitions(conversation.creator)
         if not memory_enabled:
@@ -481,9 +482,14 @@ class Engine:
             "task": task_id,
             "root": str(root),
             "version": task.version_id,
-            "system": system,
+            "promptParts": prompt_parts,
+            "continuationPrompt": task.continuation_prompt
+            if task.continuation_prompt is not None
+            else DEFAULTS.continuation,
             "model": task.model,
-            "key": self.settings.model_api_key.get_secret_value(),
+            "key": self.settings.resolve_model(
+                task.model.get("key")
+            ).api_key.get_secret_value(),
             "web": "web" in task.definition.get("tools", ["web"]),
             "search": {
                 "key": self.settings.search_api_key.get_secret_value(),
@@ -491,7 +497,7 @@ class Engine:
                 "model": self.settings.search_model,
             },
             "prompt": task.prompt,
-            "reasoning": conversation.reasoning,
+            "reasoning": task.model.get("reasoning", conversation.reasoning),
             "tools": specs,
             "remote": remote,
             "continue": continuation,
@@ -676,6 +682,7 @@ class Engine:
             )
             for task in tasks:
                 task.status = "stopped"
+                task.finished_at = task.finished_at or datetime.now(UTC).isoformat()
                 task.questions = []
                 if task.id in self.live:
                     task.messages = copy.deepcopy(self.live[task.id].messages)

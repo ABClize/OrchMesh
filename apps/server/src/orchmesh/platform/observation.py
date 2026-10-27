@@ -30,6 +30,7 @@ class TaskNode(BaseModel):
     activity: str
     worker_attached: bool
     created_at: str
+    finished_at: str | None = None
     error: str | None
     sandbox_requested: bool
     revision: int
@@ -217,6 +218,7 @@ class Observation:
             activity=activity,
             worker_attached=attached,
             created_at=task.created_at,
+            finished_at=task.finished_at,
             error=task.error,
             sandbox_requested=task.sandbox,
             revision=task.revision,
@@ -389,6 +391,24 @@ def router(auth, manager) -> APIRouter:
         task_id: str, user: Annotated[User, Depends(auth.current_user)]
     ) -> TaskDetail:
         return await observation.detail(task_id, user)
+
+    @api.get("/tasks/{task_id}/effective-prompt")
+    async def effective_prompt(
+        task_id: str, user: Annotated[User, Depends(auth.current_user)]
+    ) -> dict:
+        if not user.is_superuser:
+            raise HTTPException(403, "仅管理员可以查看实际提示词。")
+        await observation.owned_task(task_id, user)
+        path = observation.manager.sandboxes.root(task_id) / "effective-prompt.json"
+        if not path.exists():
+            return {"available": False, "snapshot": None}
+        if path.stat().st_size > 16 * 1024 * 1024:
+            raise HTTPException(413, "提示词记录过大，暂不支持在线查看。")
+        try:
+            snapshot = json.loads(await asyncio.to_thread(path.read_text))
+        except (OSError, ValueError):
+            raise HTTPException(503, "提示词记录暂时无法读取，请重试。") from None
+        return {"available": True, "snapshot": snapshot}
 
     @api.get("/tasks/{task_id}/history")
     async def history(

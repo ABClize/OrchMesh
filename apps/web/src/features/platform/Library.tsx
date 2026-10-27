@@ -2,14 +2,10 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { platformRequest } from "@/lib/platform";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
+import { Plus, Search, Bot } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AgentCard } from "./AgentCard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -27,6 +23,8 @@ export function Library({
 }: {
   onStart: (agent: string | null, creator?: boolean) => Promise<void>;
 }) {
+  const [search, setSearch] = useState("");
+  const [comments, setComments] = useState<Agent | null>(null);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [publishing, setPublishing] = useState<Agent | null>(null);
   const { busy, error, action } = useCatalogAction();
@@ -42,7 +40,7 @@ export function Library({
   });
   return (
     <section className="platform-page">
-      <div className="platform-page-inner">
+      <div className="platform-page-inner agent-library">
         {editing ? (
           <AgentEditor
             key={editing.id}
@@ -62,6 +60,7 @@ export function Library({
                 disabled={busy}
                 onClick={() => void action(() => onStart(null, true))}
               >
+                <Plus data-icon="inline-start" />
                 创建智能体
               </Button>
             </header>
@@ -71,10 +70,21 @@ export function Library({
               </Alert>
             )}
             <Tabs defaultValue="market">
-              <TabsList aria-label="智能体来源">
-                <TabsTrigger value="market">智能体广场</TabsTrigger>
-                <TabsTrigger value="mine">我的智能体</TabsTrigger>
-              </TabsList>
+              <div className="agent-library-toolbar">
+                <TabsList aria-label="智能体来源">
+                  <TabsTrigger value="market">智能体广场</TabsTrigger>
+                  <TabsTrigger value="mine">我的智能体</TabsTrigger>
+                </TabsList>
+                <div className="agent-library-search">
+                  <Search aria-hidden="true" />
+                  <Input
+                    aria-label="搜索智能体"
+                    placeholder="搜索名称或简介…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+              </div>
               {(
                 [
                   ["market", market],
@@ -87,9 +97,14 @@ export function Library({
                   className="flex flex-col gap-4"
                 >
                   {request.isLoading && (
-                    <p role="status" className="py-8">
-                      正在读取智能体…
-                    </p>
+                    <div
+                      role="status"
+                      aria-label="正在读取智能体"
+                      className="agent-library-grid"
+                    >
+                      <Skeleton className="h-56" />
+                      <Skeleton className="h-56" />
+                    </div>
                   )}
                   {request.error && (
                     <Alert variant="destructive">
@@ -104,82 +119,97 @@ export function Library({
                       </Button>
                     </Alert>
                   )}
-                  {request.data?.length === 0 && (
-                    <p className="py-12 text-sm text-muted-foreground">
-                      {kind === "mine"
-                        ? "还没有智能体。点击创建，用自然语言描述它的职责。"
-                        : "暂无已发布的智能体。"}
-                    </p>
-                  )}
-                  {request.data?.map((agent) => (
-                    <Card key={agent.id}>
-                      <CardHeader>
-                        <CardTitle>{agent.name}</CardTitle>
-                        <CardDescription className="whitespace-pre-wrap break-words">
-                          {agent.description}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-xs text-muted-foreground">
-                          {agent.published_version
-                            ? "已有发布版本"
-                            : "草稿 · 尚未发布"}
-                        </p>
-                      </CardContent>
-                      <CardFooter className="flex flex-wrap gap-2">
-                        {agent.published_version && (
-                          <Button
-                            disabled={busy}
-                            onClick={() => void action(() => onStart(agent.id))}
-                          >
-                            开始对话
-                          </Button>
-                        )}
-                        {kind === "mine" && (
-                          <>
-                            <Button
-                              variant="outline"
-                              disabled={busy}
-                              onClick={() => setEditing(agent)}
-                            >
-                              编辑草稿
-                            </Button>
-                            <Button
-                              variant="outline"
-                              disabled={busy}
-                              onClick={() =>
-                                void action(() => onStart(`draft:${agent.id}`))
+                  {request.data && (
+                    <>
+                      <p
+                        className="text-xs text-muted-foreground"
+                        role="status"
+                      >
+                        {
+                          request.data.filter((agent) =>
+                            `${agent.name} ${agent.description}`
+                              .toLowerCase()
+                              .includes(search.trim().toLowerCase()),
+                          ).length
+                        }{" "}
+                        个智能体{search.trim() ? "符合搜索" : ""}
+                      </p>
+                      <div className="agent-library-grid">
+                        {request.data
+                          .filter((agent) =>
+                            `${agent.name} ${agent.description}`
+                              .toLowerCase()
+                              .includes(search.trim().toLowerCase()),
+                          )
+                          .map((agent) => (
+                            <AgentCard
+                              key={agent.id}
+                              agent={agent}
+                              mine={kind === "mine"}
+                              busy={busy}
+                              onStart={(draft) =>
+                                void action(() =>
+                                  onStart(
+                                    draft ? `draft:${agent.id}` : agent.id,
+                                  ),
+                                )
                               }
-                            >
-                              试运行
-                            </Button>
+                              onEdit={() => setEditing(agent)}
+                              onPublish={() => setPublishing(agent)}
+                              onComments={() => setComments(agent)}
+                            />
+                          ))}
+                      </div>
+                      {!request.data.some((agent) =>
+                        `${agent.name} ${agent.description}`
+                          .toLowerCase()
+                          .includes(search.trim().toLowerCase()),
+                      ) && (
+                        <div className="agent-library-empty">
+                          <Bot aria-hidden="true" />
+                          <p>
+                            {search.trim()
+                              ? "没有找到匹配的智能体"
+                              : kind === "mine"
+                                ? "还没有自己的智能体"
+                                : "暂无已发布的智能体"}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {search.trim()
+                              ? "换个关键词，或清空搜索查看全部。"
+                              : "用自然语言描述职责，即可开始创建。"}
+                          </p>
+                          {search.trim() && (
                             <Button
                               variant="outline"
-                              disabled={busy}
-                              onClick={() => setPublishing(agent)}
+                              onClick={() => setSearch("")}
                             >
-                              发布新版本
+                              清空搜索
                             </Button>
-                          </>
-                        )}
-                      </CardFooter>
-                      {kind === "market" && (
-                        <CardContent>
-                          <details>
-                            <summary className="cursor-pointer text-sm">
-                              查看评论
-                            </summary>
-                            <AgentComments agentId={agent.id} />
-                          </details>
-                        </CardContent>
+                          )}
+                        </div>
                       )}
-                    </Card>
-                  ))}
+                    </>
+                  )}
                 </TabsContent>
               ))}
             </Tabs>
           </div>
         )}
+        <Dialog
+          open={!!comments}
+          onOpenChange={(open) => {
+            if (!open) setComments(null);
+          }}
+        >
+          <DialogContent className="max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{comments?.name} · 评论</DialogTitle>
+              <DialogDescription>查看使用反馈与讨论。</DialogDescription>
+            </DialogHeader>
+            {comments && <AgentComments agentId={comments.id} />}
+          </DialogContent>
+        </Dialog>
         <Dialog
           open={!!publishing}
           onOpenChange={(value) => {

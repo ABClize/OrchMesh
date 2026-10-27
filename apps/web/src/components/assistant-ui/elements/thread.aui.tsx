@@ -137,6 +137,7 @@ export type ThreadProps = {
   autoFocus?: boolean | undefined;
   readOnly?: boolean;
   composerHeader?: ReactNode;
+  composerActions?: ReactNode;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -183,6 +184,7 @@ export const Thread: FC<ThreadProps> = ({
   autoFocus = true,
   readOnly = false,
   composerHeader,
+  composerActions,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
 
@@ -193,6 +195,7 @@ export const Thread: FC<ThreadProps> = ({
         autoFocus={autoFocus}
         readOnly={readOnly}
         composerHeader={composerHeader}
+        composerActions={composerActions}
       />
     </ThreadComponentsContext.Provider>
   );
@@ -203,12 +206,13 @@ const ThreadRoot: FC<{
   autoFocus: boolean;
   readOnly: boolean;
   composerHeader?: ReactNode;
-}> = ({ isEmpty, autoFocus, readOnly, composerHeader }) => {
+  composerActions?: ReactNode;
+}> = ({ isEmpty, autoFocus, readOnly, composerHeader, composerActions }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
   return (
     <ThreadPrimitive.Root
-      className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
+      className="aui-root aui-thread-root bg-background @container flex min-h-0 flex-1 flex-col"
       style={{
         ["--thread-max-width" as string]: "44rem",
         ["--composer-bg" as string]: "var(--card)",
@@ -256,8 +260,11 @@ const ThreadRoot: FC<{
             {!readOnly && (
               <>
                 <ThreadFollowupSuggestions />
-                {composerHeader}
-                <Composer autoFocus={autoFocus} />
+                <Composer
+                  autoFocus={autoFocus}
+                  actions={composerActions}
+                  header={composerHeader}
+                />
               </>
             )}
             <AuiIf
@@ -517,7 +524,11 @@ const ThreadSuggestionItem: FC = () => {
   );
 };
 
-const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+const Composer: FC<{
+  autoFocus: boolean;
+  actions?: ReactNode;
+  header?: ReactNode;
+}> = ({ autoFocus, actions, header }) => {
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone asChild>
@@ -525,23 +536,24 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           data-slot="aui_composer-shell"
           className="border-foreground/10 focus-within:border-foreground/25 data-[dragging=true]:border-ring flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) transition-[border-color] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
         >
+          {header}
           <ComposerAttachments />
           <ComposerPrimitive.Input
-            placeholder="输入消息，让 DSH 开始工作…"
+            placeholder="描述任务，让助手开始工作…"
             className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-16 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none"
             rows={1}
             autoFocus={autoFocus}
             enterKeyHint="send"
             aria-label="Message input"
           />
-          <ComposerAction />
+          <ComposerAction actions={actions} />
         </div>
       </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
   );
 };
 
-const ComposerAction: FC = () => {
+const ComposerAction: FC<{ actions?: ReactNode }> = ({ actions }) => {
   // The stop control only cancels the send while no run it could stop is going.
   const isSending = useAuiState(
     (s) =>
@@ -551,9 +563,13 @@ const ComposerAction: FC = () => {
 
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-end">
-      <span className="mr-auto px-2.5 text-xs text-muted-foreground">
-        OrchMesh · 工作空间助手
-      </span>
+      <div className="mr-auto flex min-w-0 items-center gap-1">
+        {actions ?? (
+          <span className="px-2.5 text-xs text-muted-foreground">
+            OrchMesh · 工作空间助手
+          </span>
+        )}
+      </div>
       <AuiIf condition={(s) => s.thread.capabilities.attachments}>
         <ComposerAddAttachment />
       </AuiIf>

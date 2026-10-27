@@ -93,3 +93,18 @@ it("shows task waiting even when question tool has already returned", () => {
   );
   expect(screen.getByText("等待你的回答")).toBeTruthy();
 });
+
+it("uses independent running and waiting states on the same time axis", () => {
+  const { container } = render(
+    <TraceWaterfall
+      spans={[
+        { ...spans[0], running: false, label: "等待协作者" },
+        { ...spans[1], running: true },
+      ]}
+      live
+      running={false}
+    />,
+  );
+  expect(container.querySelectorAll('[data-running="true"]')).toHaveLength(1);
+  expect(screen.getByRole("button", { name: /bash · 执行中/ })).toBeTruthy();
+});

@@ -1,3 +1,4 @@
+import { ReasoningSettings } from "./ReasoningSettings";
 import { TaskInputs } from "../platform/TaskInputs";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import {
   AssistantRuntimeProvider,
   useExternalStoreRuntime,
 } from "@assistant-ui/react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { Welcome, suggestions } from "./Welcome";
 import { AffectTool } from "./AffectTool";
 import { sendPrompt } from "./commands";
@@ -45,13 +46,19 @@ export function Chat({
   onUnauthorized,
   active = true,
   archived = false,
+  reasoning = "default",
+  modelId,
 }: {
   id: string;
   onUnauthorized: () => void;
   active?: boolean;
   archived?: boolean;
+  reasoning?: string;
+  modelId?: string | null;
 }) {
   const state = useChat();
+  const savingModel =
+    useIsMutating({ mutationKey: ["model-preference", id] }) > 0;
   const readOnly = !!state.read_only || archived;
   const [view, setView] = useState("chat");
   const [selection, setSelection] = useState<Selection>(null);
@@ -151,7 +158,7 @@ export function Chat({
     convertMessage: (message) => message,
     isRunning: state.status === "running",
     isLoading: loading,
-    isDisabled: readOnly,
+    isDisabled: readOnly || savingModel,
     onNew: async (message) => {
       const text = message.content
         .filter((p) => p.type === "text")
@@ -244,12 +251,20 @@ export function Chat({
           <Thread
             components={components}
             readOnly={readOnly}
-            composerHeader={
+            composerActions={
               !readOnly ? (
-                <TaskInputs
-                  id={id}
-                  disabled={loading || state.status === "running"}
-                />
+                <>
+                  <TaskInputs
+                    id={id}
+                    disabled={loading || state.status === "running"}
+                  />
+                  <ReasoningSettings
+                    id={id}
+                    value={reasoning}
+                    modelId={modelId}
+                    running={loading || state.status === "running"}
+                  />
+                </>
               ) : undefined
             }
           />
@@ -264,6 +279,7 @@ export function Chat({
             !graph.data.calls.length ? null : (
             <ObservationWorkspace
               active={view === "observation" && active && !filesOpen}
+              live={graph.connection === "live"}
               graph={graph.data}
               readOnly={readOnly}
               selection={selection}

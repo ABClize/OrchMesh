@@ -1,8 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api } from "../../lib/api";
 import { createDraftSender, sendPrompt } from "./commands";
 
+beforeEach(() => {
+  vi.spyOn(api, "PUT").mockResolvedValue({
+    data: {},
+    response: new Response(),
+  } as never);
+});
 afterEach(() => vi.restoreAllMocks());
 
 test("a failed first send retains the created conversation for explicit retry", async () => {
@@ -86,4 +92,27 @@ test("an uncertain HTTP failure reuses request identity on explicit retry", asyn
   await expect(sendPrompt("durable-retry", "same operation")).rejects.toThrow();
   await sendPrompt("durable-retry", "same operation");
   expect(post.mock.calls[0]).toEqual(post.mock.calls[1]);
+});
+
+test("first prompt persists chosen effort before sending and cannot send if persistence fails", async () => {
+  const post = vi.spyOn(api, "POST").mockResolvedValueOnce({
+    data: { id: "effort-chat" },
+    response: new Response(),
+  } as never);
+  vi.mocked(api.PUT).mockResolvedValueOnce({
+    error: { detail: "offline" },
+    response: new Response(null, { status: 503 }),
+  } as never);
+  const send = createDraftSender();
+  await expect(send("hello", false, "high")).rejects.toThrow(
+    "保存思考设置失败",
+  );
+  expect(post).toHaveBeenCalledTimes(1);
+  expect(api.PUT).toHaveBeenCalledWith(
+    "/api/conversations/{conversation_id}/reasoning",
+    {
+      params: { path: { conversation_id: "effort-chat" } },
+      body: { reasoning: "high" },
+    },
+  );
 });

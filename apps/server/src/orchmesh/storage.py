@@ -47,6 +47,7 @@ class Conversation(Base):
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(index=True)
     directory_id: Mapped[uuid.UUID | None] = mapped_column()
+    model_id: Mapped[str | None] = mapped_column(String(128))
     reasoning: Mapped[str] = mapped_column(
         String(32), default="default", server_default="default"
     )
@@ -118,12 +119,15 @@ class Task(Base):
     agent_id: Mapped[str | None] = mapped_column(String(64))
     version_id: Mapped[str | None] = mapped_column(String(64))
     definition: Mapped[dict] = mapped_column(JSON)
+    continuation_prompt: Mapped[str | None] = mapped_column(Text)
+    platform_prompt: Mapped[str | None] = mapped_column(Text)
     prompt: Mapped[str] = mapped_column(Text)
     context: Mapped[list] = mapped_column(JSON, default=list)
     model: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(32), default="queued", index=True)
     messages: Mapped[list] = mapped_column(JSON, default=list)
     questions: Mapped[list] = mapped_column(JSON, default=list)
+    finished_at: Mapped[str | None] = mapped_column(String(64))
     sandbox: Mapped[bool] = mapped_column(default=False)
     a2a_id: Mapped[str | None] = mapped_column(String(128))
     a2a_context: Mapped[str | None] = mapped_column(String(128))

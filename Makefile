@@ -26,10 +26,13 @@ run:
 	uv run --directory apps/server orchmesh run
 
 check:
+	node --check apps/runtime/model-route.mjs
+	node --check apps/runtime/model-probe.mjs
 	node --check apps/runtime/task-worker.mjs
 	node --check apps/runtime/task-remote.mjs
 	node --check apps/runtime/export-history.mjs
 	node --check apps/runtime/observe-session.mjs
+	node --check apps/runtime/prompt-observation.mjs
 	uv run --directory apps/server ruff check src tests
 	uv run --directory apps/server ruff format --check src tests
 	uv run --directory apps/server pyright src

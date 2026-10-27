@@ -1,3 +1,4 @@
+import { ReasoningSettings } from "./ReasoningSettings";
 import { useEffect, useRef, useState } from "react";
 import {
   AssistantRuntimeProvider,
@@ -31,6 +32,9 @@ export function DraftChat({
       mounted.current = false;
     };
   }, []);
+  const [modelId, setModelId] = useState<string>();
+  const [reasoning, setReasoning] = useState("default");
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const runtime = useExternalStoreRuntime({
     messages,
@@ -42,14 +46,18 @@ export function DraftChat({
         .join("\n");
       setError("");
       onBusyChange(true);
+      setSending(true);
       try {
-        const id = await sender.current(text);
+        const id = await sender.current(text, false, reasoning, modelId);
         if (mounted.current) onStarted(id);
       } catch (cause) {
         if (mounted.current) setError((cause as Error).message);
         throw cause;
       } finally {
-        if (mounted.current) onBusyChange(false);
+        if (mounted.current) {
+          onBusyChange(false);
+          setSending(false);
+        }
       }
     },
   });
@@ -60,7 +68,18 @@ export function DraftChat({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <Thread components={components} />
+      <Thread
+        components={components}
+        composerActions={
+          <ReasoningSettings
+            value={reasoning}
+            modelId={modelId}
+            onModelChange={setModelId}
+            onChange={setReasoning}
+            running={sending}
+          />
+        }
+      />
     </AssistantRuntimeProvider>
   );
 }

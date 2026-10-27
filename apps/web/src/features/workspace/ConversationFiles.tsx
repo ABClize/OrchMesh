@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, X, Files, PackageOpen, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -57,11 +57,14 @@ export function ConversationFiles({ id }: { id: string }) {
     );
   return (
     <section
-      className="flex h-full min-h-0 flex-col bg-background"
+      className="workspace-detail-panel flex h-full min-h-0 flex-col bg-background"
       aria-label="对话文件"
     >
       <header className="flex items-center justify-between border-b p-3">
-        <h2 className="text-sm font-medium">材料与成果</h2>
+        <h2 className="panel-heading">
+          <Files />
+          材料与成果
+        </h2>
         <Button
           variant="ghost"
           size="icon"
@@ -74,8 +77,14 @@ export function ConversationFiles({ id }: { id: string }) {
       <div className="flex-1 overflow-auto p-4">
         <Tabs defaultValue="outputs">
           <TabsList aria-label="文件分类">
-            <TabsTrigger value="outputs">交付成果</TabsTrigger>
-            <TabsTrigger value="inputs">任务材料</TabsTrigger>
+            <TabsTrigger value="outputs">
+              <PackageOpen />
+              交付成果
+            </TabsTrigger>
+            <TabsTrigger value="inputs">
+              <Paperclip />
+              任务材料
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="outputs" className="flex flex-col gap-3">
             {tasks.isLoading && <p role="status">正在读取成果…</p>}

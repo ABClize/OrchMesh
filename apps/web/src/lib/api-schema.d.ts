@@ -4,6 +4,59 @@
  */
 
 export interface paths {
+  "/api/settings/models": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Models */
+    get: operations["list_models_api_settings_models_get"];
+    /** Save */
+    put: operations["save_api_settings_models_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/settings/models/probe": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Probe */
+    post: operations["probe_api_settings_models_probe_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/settings/prompts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get */
+    get: operations["get_api_settings_prompts_get"];
+    /** Save */
+    put: operations["save_api_settings_prompts_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/login/access-token": {
     parameters: {
       query?: never;
@@ -249,6 +302,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/tasks/{task_id}/effective-prompt": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Effective Prompt */
+    get: operations["effective_prompt_api_tasks__task_id__effective_prompt_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/tasks/{task_id}/history": {
     parameters: {
       query?: never;
@@ -398,7 +468,8 @@ export interface paths {
     get: operations["snapshot_api_conversations__conversation_id__get"];
     put?: never;
     post?: never;
-    delete?: never;
+    /** Delete Conversation */
+    delete: operations["delete_conversation_api_conversations__conversation_id__delete"];
     options?: never;
     head?: never;
     /** Update */
@@ -675,6 +746,8 @@ export interface components {
       title: string;
       /** Reasoning */
       reasoning: string;
+      /** Model Id */
+      model_id?: string | null;
       /** Project Id */
       project_id: string | null;
       /** Directory Id */
@@ -750,6 +823,57 @@ export interface components {
       /** Enabled */
       enabled: boolean;
     };
+    /** ModelWrite */
+    ModelWrite: {
+      /** Key */
+      key: string;
+      /** Name */
+      name: string;
+      /** Id */
+      id: string;
+      /** Base Url */
+      base_url: string;
+      /**
+       * Api Key
+       * Format: password
+       * @default
+       */
+      api_key: string;
+      /**
+       * Api
+       * @default openai-completions
+       * @enum {string}
+       */
+      api: "openai-completions" | "openai-responses" | "anthropic-messages";
+      /** Reasoning Efforts */
+      reasoning_efforts?: {
+        [key: string]: string | null;
+      } | null;
+      /** Thinking Format */
+      thinking_format?: "deepseek" | null;
+      /**
+       * Provider
+       * @default project
+       */
+      provider: string;
+      /** Supported Efforts */
+      supported_efforts?: string[];
+      /**
+       * Revision
+       * @default environment
+       */
+      revision: string;
+      /**
+       * Make Default
+       * @default false
+       */
+      make_default: boolean;
+      /**
+       * Creating
+       * @default false
+       */
+      creating: boolean;
+    };
     /** ObservedEvent */
     ObservedEvent: {
       /** Id */
@@ -791,6 +915,30 @@ export interface components {
        */
       review_tools: boolean;
     };
+    /** PromptCatalog */
+    PromptCatalog: {
+      prompts: components["schemas"]["Prompts"];
+      defaults: components["schemas"]["Prompts"];
+      /** Revision */
+      revision: string;
+    };
+    /** PromptWrite */
+    PromptWrite: {
+      prompts: components["schemas"]["Prompts"];
+      /** Revision */
+      revision: string;
+    };
+    /** Prompts */
+    Prompts: {
+      /** Continuation */
+      continuation: string;
+      /** Assistant */
+      assistant: string;
+      /** Builder */
+      builder: string;
+      /** Platform */
+      platform: string;
+    };
     /** Publication */
     Publication: {
       /** Confirm */
@@ -808,7 +956,9 @@ export interface components {
     /** ReasoningPreference */
     ReasoningPreference: {
       /** Reasoning */
-      reasoning: string;
+      reasoning?: string | null;
+      /** Model Id */
+      model_id?: string | null;
     };
     /** RunRead */
     RunRead: {
@@ -868,6 +1018,8 @@ export interface components {
       worker_attached: boolean;
       /** Created At */
       created_at: string;
+      /** Finished At */
+      finished_at?: string | null;
       /** Error */
       error: string | null;
       /** Sandbox Requested */
@@ -915,6 +1067,8 @@ export interface components {
       worker_attached: boolean;
       /** Created At */
       created_at: string;
+      /** Finished At */
+      finished_at?: string | null;
       /** Error */
       error: string | null;
       /** Sandbox Requested */
@@ -1185,6 +1339,153 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  list_models_api_settings_models_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  save_api_settings_models_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelWrite"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  probe_api_settings_models_probe_post: {
+    parameters: {
+      query?: {
+        test?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelWrite"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_api_settings_prompts_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PromptCatalog"];
+        };
+      };
+    };
+  };
+  save_api_settings_prompts_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PromptWrite"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PromptCatalog"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   login_api_login_access_token_post: {
     parameters: {
       query?: never;
@@ -1891,6 +2192,39 @@ export interface operations {
       };
     };
   };
+  effective_prompt_api_tasks__task_id__effective_prompt_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        task_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   history_api_tasks__task_id__history_get: {
     parameters: {
       query?: {
@@ -2121,6 +2455,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Snapshot"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_conversation_api_conversations__conversation_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: string;
+          };
         };
       };
       /** @description Validation Error */

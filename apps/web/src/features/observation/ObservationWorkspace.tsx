@@ -1,3 +1,5 @@
+import { CollaborationTrace } from "./CollaborationTrace";
+import type { CollaborationSpan } from "./fullTraceModel";
 import { revealPath } from "@/components/agent-tree/forest";
 import { CallTree } from "./CallTree";
 import { AnimatedDisclosure } from "@/components/relationship-diagram/AnimatedDisclosure";
@@ -22,15 +24,19 @@ export function ObservationWorkspace({
   selection,
   onSelect,
   active,
+  live = true,
 }: {
   active: boolean;
+  live?: boolean;
   graph: AgentGraph;
   readOnly: boolean;
   selection: Selection;
   onSelect: (selection: Selection) => void;
 }) {
+  const [recordSelection, setRecordSelection] =
+    useState<CollaborationSpan | null>(null);
   const [scope, setScope] = useState("latest");
-  const [mode, setMode] = useState("tree");
+  const [mode, setMode] = useState("trace");
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [chosenCall, setChosenCall] = useState<string | null>(null);
 
@@ -72,11 +78,17 @@ export function ObservationWorkspace({
     taskId && active ? (
       <CallInspector
         key={taskId}
+        selectedRecord={
+          recordSelection?.taskId === taskId
+            ? recordSelection.record
+            : undefined
+        }
         taskId={taskId}
         calls={graph.calls}
         readOnly={readOnly}
         onSelect={(id) => {
           setChosenCall(null);
+          setRecordSelection(null);
           onSelect({ kind: "task", id });
         }}
       />
@@ -192,6 +204,7 @@ export function ObservationWorkspace({
         {desktop && (
           <Tabs value={mode} onValueChange={setMode}>
             <TabsList aria-label="协作展示方式">
+              <TabsTrigger value="trace">全链路瀑布图</TabsTrigger>
               <TabsTrigger value="tree">调用树</TabsTrigger>
               <TabsTrigger value="graph">聚合关系图</TabsTrigger>
               <TabsTrigger value="list">列表</TabsTrigger>
@@ -209,6 +222,24 @@ export function ObservationWorkspace({
               <p className="py-12 text-center text-sm text-muted-foreground">
                 尚无运行记录。发送任务后，可在这里查看协作过程。
               </p>
+            ) : mode === "trace" && desktop && active ? (
+              <CollaborationTrace
+                key={rootId ?? "all"}
+                calls={scoped.calls}
+                live={live}
+                selectedId={
+                  selection?.kind === "task"
+                    ? recordSelection?.taskId === selection.id
+                      ? recordSelection.id
+                      : selection.id
+                    : null
+                }
+                onSelect={(span) => {
+                  setRecordSelection(span);
+                  setChosenCall(null);
+                  onSelect({ kind: "task", id: span.taskId });
+                }}
+              />
             ) : mode === "tree" && desktop && active ? (
               <CallTree
                 calls={scoped.calls}
