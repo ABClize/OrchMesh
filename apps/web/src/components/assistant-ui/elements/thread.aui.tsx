@@ -72,6 +72,7 @@ import {
   type ComponentType,
   type FC,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
@@ -134,6 +135,8 @@ const taskAwareGroupBy = (
 export type ThreadProps = {
   components?: ThreadComponents | undefined;
   autoFocus?: boolean | undefined;
+  readOnly?: boolean;
+  composerHeader?: ReactNode;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -178,20 +181,29 @@ const ThreadHistorySkeleton: FC = () => (
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
   autoFocus = true,
+  readOnly = false,
+  composerHeader,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
 
   return (
     <ThreadComponentsContext.Provider value={components}>
-      <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
+      <ThreadRoot
+        isEmpty={isEmpty}
+        autoFocus={autoFocus}
+        readOnly={readOnly}
+        composerHeader={composerHeader}
+      />
     </ThreadComponentsContext.Provider>
   );
 };
 
-const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
-  isEmpty,
-  autoFocus,
-}) => {
+const ThreadRoot: FC<{
+  isEmpty: boolean;
+  autoFocus: boolean;
+  readOnly: boolean;
+  composerHeader?: ReactNode;
+}> = ({ isEmpty, autoFocus, readOnly, composerHeader }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
   return (
@@ -241,11 +253,19 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({
             )}
           >
             <ThreadScrollToBottom />
-            <ThreadFollowupSuggestions />
-            <Composer autoFocus={autoFocus} />
+            {!readOnly && (
+              <>
+                <ThreadFollowupSuggestions />
+                {composerHeader}
+                <Composer autoFocus={autoFocus} />
+              </>
+            )}
             <AuiIf
               condition={(s) =>
-                isNewChatView(s) && s.composer.isEmpty && !s.composer.submission
+                !readOnly &&
+                isNewChatView(s) &&
+                s.composer.isEmpty &&
+                !s.composer.submission
               }
             >
               <ThreadSuggestions />
@@ -532,7 +552,7 @@ const ComposerAction: FC = () => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-end">
       <span className="mr-auto px-2.5 text-xs text-muted-foreground">
-        DSH · 工作空间助手
+        OrchMesh · 工作空间助手
       </span>
       <AuiIf condition={(s) => s.thread.capabilities.attachments}>
         <ComposerAddAttachment />

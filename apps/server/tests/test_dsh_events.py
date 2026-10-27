@@ -1,5 +1,4 @@
 from orchmesh.dsh.events import Adapter, history, message
-from orchmesh.dsh.manager import Execution
 
 
 def test_native_tool_errors_and_results_reach_existing_cards():
@@ -55,20 +54,6 @@ def test_history_keeps_chat_across_compaction_without_system_prompt_leak():
     assert messages[1]["stopReason"] == reason == "aborted"
 
 
-def test_nested_sessions_cannot_replace_root_chat():
-    import uuid
-
-    run = Execution(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
-    run.accept(
-        {
-            "method": "orchmesh.stream",
-            "params": {"sessionId": str(uuid.uuid4()), "frame": {"type": "start"}},
-        }
-    )
-    assert run.projection.messages == []
-    assert run.sequence == 0
-
-
 def test_streaming_is_visible_before_message_settlement():
     from orchmesh.dsh.messages import Messages
 
@@ -116,3 +101,18 @@ def test_native_delivery_updates_tool_result_for_live_and_cold_views():
         assert projection.messages == history(events)[0]
         assert len(projection.messages) == 1
         assert "dsh.deliverables" in projection.messages[0]["content"][0]["text"]
+
+
+def test_internal_continuation_is_not_displayed_as_user_instruction():
+    from orchmesh.dsh.events import message
+
+    assert (
+        message(
+            {
+                "role": "user",
+                "source": {"kind": "orchmesh-continuation"},
+                "content": [{"type": "text", "text": "resume internals"}],
+            }
+        )
+        is None
+    )

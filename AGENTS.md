@@ -2,42 +2,34 @@
 
 ## Scope & Architecture
 
-OrchMesh is a small multi-user DSH workspace. DSH owns the Agent Loop, Shell, file tools, and durable JSONL messages. FastAPI owns authentication, conversation ownership, execution metadata, and SSE. One API process serves the built React application and manages isolated user containers.
+OrchMesh creates, publishes, and runs reusable agents. Read `docs/architecture/agent-platform-v1.md` and `docs/development/agent-platform-migration.md` before changing execution ownership. The acceptance report distinguishes implemented behavior from remaining release gates.
 
-Before changing execution semantics, read `docs/architecture/v0.1-simplified.md`; read `docs/architecture/dsh-runtime.md` for the DSH bridge, storage, Controller APIs and directory mapping. Prefer official CLIs and component conventions over earlier proposed directory layouts.
+FastAPI owns authentication, accounts, agent versions, task ownership, and file authorization. DBOS owns durable scheduling and waiting; DSH owns the agent loop, session log, checkpoints, and tools. Official A2A stores own protocol tasks and events. Never introduce a second agent loop or recovery queue.
 
 ## Project Structure
 
-- `apps/server/src/orchmesh/`: FastAPI app, auth, storage, administration, and `dsh/` integration.
-- `apps/server/migrations/`: Alembic schema history; `tests/`: behavior and container tests.
-- `apps/web/src/`: React app, generated components, chat adapter, and typed API client.
-- `apps/runtime/`: pinned official DSH and a public-API bridge.
-- `deploy/dsh.Dockerfile`: pinned DSH image; `docs/`: architecture, research, and validation.
-- `.agents/skills/`: project-level upstream skills managed through `npx skills`.
+- `apps/server/src/orchmesh/platform/`: catalog, durable execution, A2A, task sandboxes, and artifacts.
+- `apps/server/src/orchmesh/dsh/`: message projection and model validation.
+- `apps/server/migrations/platform_versions/`: PostgreSQL business schema; `tests/`: deterministic behavior tests.
+- `apps/runtime/`: pinned official DSH packages and execution composition.
+- `apps/web/src/`: React UI, assistant-ui chat runtime, and generated API types.
+- `deploy/sandbox.Dockerfile`: disposable execution image; `compose.yaml`: PostgreSQL.
+- `.agents/skills/`: upstream project skills managed through `npx skills`.
 
 ## Build & Development
 
-Run commands from the repository root:
+Run `make setup` to install locked dependencies and prepare PostgreSQL and the sandbox image. Configure `.env`, then use `make dev` for hot reload or `make run` for a built single-service application. Ctrl+C stops the application; PostgreSQL remains running. `docker compose stop db` stops it without deleting data.
 
-- `uv sync --directory apps/server --locked` and `npm --prefix apps/web ci`: restore dependencies.
-- `uv run --directory apps/server alembic upgrade head`: migrate the database.
-- `uv run --directory apps/server fastapi dev`: backend development.
-- `npm --prefix apps/web run dev`: Vite with API proxy.
-- `npm --prefix apps/web run build`: type-check and build production assets.
-- `./scripts/generate-api.sh`: regenerate OpenAPI client types.
-
-Account creation and per-user model configuration commands are documented in `README.md`.
+Run `make check` for lint, types, formatting, and API drift; `make test` for builds, pytest, and Vitest. Regenerate contracts with `./scripts/generate-api.sh` after API changes.
 
 ## Coding & Testing
 
-Use typed Python, four-space indentation, and snake_case; use two-space TypeScript and PascalCase React components. Run Ruff, Pyright, ESLint, and Prettier using installed project tools.
+Use typed Python with four spaces and snake_case; use two-space TypeScript and PascalCase components. Follow Ruff, Pyright, ESLint, and Prettier. Prefer existing Affect UI components, shadcn for gaps, and assistant-ui for chat state.
 
-Run `uv run --directory apps/server pytest -q`, frontend `npm --prefix apps/web test`, then use Codex’s built-in browser for UI acceptance following `docs/development/browser-acceptance.md`. Name Python tests `test_*.py` and frontend tests `*.test.ts`. There is no numeric coverage threshold; cover ownership, JWT expiry, cancellation, reconnect, failure, and cleanup behavior. Use the configured administrator account and real project model for end-to-end acceptance by default; label test conversations and preserve existing data. Keep deterministic tests for failure/expiry cases, and report them separately from real-model acceptance.
+Name tests `test_*.py` or `*.test.ts(x)`. Test ownership, immutable versions, duplicate admission, cancellation, recovery, and file access. Report deterministic tests separately from real administrator/model and Codex browser acceptance. Label acceptance conversations; preserve existing data.
 
-## Runtime & Contributions
+## Data & Contributions
 
-Use the official-template Bearer JWT flow for API and SSE; follow `README.md` for token lifetime and logout semantics. Preserve per-user container mounts and the single-instance lock. Keep credentials and runtime data outside tracked files. Database foreign-key enforcement is intentionally disabled; enforce ownership and lifecycle rules in the application. For logging changes, follow `docs/development/logging.md`. Keep Controller-owned sessions on public Agent/Subagent completion APIs; see `docs/architecture/dsh-runtime.md` for ownership and stopping semantics. Use official Workspace/Session Controllers for navigation and execution; preserve existing file references. Keep unsupported UI actions hidden.
+Never commit `.env`, credentials, logs, databases, or `.data/`. Existing history is read-only; continuing forks its history and file binding. No per-user container or host shell: execution containers belong to tasks and are disposable. Database foreign keys are intentionally omitted; enforce ownership explicitly.
 
-Use Conventional Commits, following the existing `feat:` history. PRs should explain behavior, link relevant issues or design decisions, state validation and remaining limitations, and include screenshots for UI changes.
-
-Prefer Codex built-in tools for browser interaction and debugging. Add external development tools only when required by the application or checks that the built-in tools cannot provide.
+Use Conventional Commits. PRs describe behavior, validation, limitations, and relevant design decisions; include screenshots for UI changes. Do not push without authorization.

@@ -1,29 +1,42 @@
 import { useState } from "react";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button-clean";
 import { deliveredFiles, downloadFile, useFiles } from "./files";
 
 export const Delivery: ToolCallMessagePartComponent = ({
   result,
   status,
   isError,
-}) => {
+}) => (
+  <DeliveryFiles
+    files={deliveredFiles(result)}
+    running={status.type === "running"}
+    isError={isError}
+  />
+);
+
+export function DeliveryFiles({
+  files,
+  running = false,
+  isError = false,
+  title = "交付文件",
+}: {
+  files: ReturnType<typeof deliveredFiles>;
+  running?: boolean;
+  isError?: boolean;
+  title?: string;
+}) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const files = deliveredFiles(result);
   return (
-    <section aria-label="交付文件" className="rounded-xl border p-4">
+    <section aria-label={title} className="rounded-xl border p-4">
       <p className="font-medium">
-        {isError
-          ? "文件交付失败"
-          : status.type === "running"
-            ? "正在准备文件…"
-            : "交付文件"}
+        {isError ? "文件交付失败" : running ? "正在准备文件…" : title}
       </p>
       {files.map((file) => (
         <div key={file.path} className="flex flex-wrap items-center gap-2 py-2">
           <Button
-            variant="link"
+            variant="ghost"
             className="min-w-0 max-w-full truncate"
             onClick={() => useFiles.getState().show(file.path)}
           >
@@ -40,7 +53,7 @@ export const Delivery: ToolCallMessagePartComponent = ({
             </span>
           )}
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={busy}
             onClick={async () => {
@@ -60,7 +73,7 @@ export const Delivery: ToolCallMessagePartComponent = ({
         </div>
       ))}
       <p className="text-xs text-muted-foreground">
-        预览和下载工作区中的当前文件。工作区外文件不提供下载。
+        已交付的文件可预览或下载。
       </p>
       {(error || (isError && !files.length)) && (
         <p role="alert">
@@ -69,4 +82,4 @@ export const Delivery: ToolCallMessagePartComponent = ({
       )}
     </section>
   );
-};
+}

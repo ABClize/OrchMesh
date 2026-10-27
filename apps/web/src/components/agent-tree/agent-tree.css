@@ -1,0 +1,81 @@
+.agent-tree-scroll {
+  overflow: auto;
+  padding: 8px 4px 16px;
+}
+.agent-tree-roots,
+.agent-tree-children {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: max-content;
+  min-width: 100%;
+}
+.agent-tree-branch {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 12px;
+}
+.agent-tree-card-slot {
+  width: var(--agent-tree-card-width, 244px);
+  position: relative;
+  animation: tree-appear 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.agent-tree-children {
+  padding-top: 32px;
+}
+.agent-tree-children > .agent-tree-branch::before {
+  content: "";
+  position: absolute;
+  top: -16px;
+  left: 0;
+  right: 0;
+  height: 16px;
+  border-top: 1px solid var(--agent-tree-line, var(--border));
+}
+.agent-tree-children > .agent-tree-branch:first-child::before {
+  left: 50%;
+}
+.agent-tree-children > .agent-tree-branch:last-child::before {
+  right: 50%;
+}
+.agent-tree-children > .agent-tree-branch::after {
+  content: "";
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  height: 16px;
+  border-left: 1px solid var(--agent-tree-line, var(--border));
+}
+.agent-tree-children::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 16px;
+  border-left: 1px solid var(--agent-tree-line, var(--border));
+}
+.agent-tree-branch > div:last-child:not(.agent-tree-card-slot) {
+  position: relative;
+}
+@keyframes tree-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-tree-scroll * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

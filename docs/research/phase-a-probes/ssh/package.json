@@ -1,0 +1,30 @@
+{
+  "name": "orchmesh-phase-a-ssh-20261027",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "@deepseek-ai/dsh-agent-loop": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-agent-preset-registry": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-bash-local": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-bash-sandbox": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-fs-ssh": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-ptc-runtime-node": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-sandbox-ssh": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-session-checkpoint-policy": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-shell-env": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-ssh": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-subprocess-ssh": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-tool-ask-user": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-tool-bash": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-tool-fs": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-tool-fs-search": "^0.2.1-rc.3",
+    "@deepseek-ai/dsh-user-questions": "^0.2.1-rc.3"
+  }
+}

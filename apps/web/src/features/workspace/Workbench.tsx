@@ -10,6 +10,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { ConversationFiles } from "./ConversationFiles";
 import { WorkspaceFiles } from "./WorkspaceFiles";
 import { useFiles } from "./files";
 
@@ -19,7 +20,13 @@ function subscribe(listener: () => void) {
   media.addEventListener("change", listener);
   return () => media.removeEventListener("change", listener);
 }
-export function Workbench({ children }: { children: ReactNode }) {
+export function Workbench({
+  children,
+  conversationId,
+}: {
+  children: ReactNode;
+  conversationId?: string | null;
+}) {
   const desktop = useSyncExternalStore(
     subscribe,
     () => window.matchMedia(query).matches,
@@ -37,7 +44,11 @@ export function Workbench({ children }: { children: ReactNode }) {
           <>
             <ResizableHandle withHandle aria-label="调整聊天与工作区宽度" />
             <ResizablePanel id="files" minSize="30%" defaultSize="45%">
-              <WorkspaceFiles />
+              {conversationId ? (
+                <ConversationFiles key={conversationId} id={conversationId} />
+              ) : (
+                <WorkspaceFiles />
+              )}
             </ResizablePanel>
           </>
         )}
@@ -57,7 +68,11 @@ export function Workbench({ children }: { children: ReactNode }) {
             <SheetDescription className="sr-only">
               浏览工作目录和已打开的文件
             </SheetDescription>
-            <WorkspaceFiles />
+            {conversationId ? (
+              <ConversationFiles key={conversationId} id={conversationId} />
+            ) : (
+              <WorkspaceFiles />
+            )}
           </SheetContent>
         </Sheet>
       )}

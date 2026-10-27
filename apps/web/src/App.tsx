@@ -1,3 +1,6 @@
+import { ContextLibrary } from "@/features/platform/ContextLibrary";
+import { Library } from "@/features/platform/Library";
+import { platformRequest } from "@/lib/platform";
 import { Navigation } from "@/features/conversations/Navigation";
 import { ReasoningSettings } from "@/features/chat/ReasoningSettings";
 import { SidebarLayout } from "@/features/workspace/SidebarLayout";
@@ -59,6 +62,12 @@ const queryClient = new QueryClient({
 function Workspace() {
   const query = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
+  const [page, setPage] = useState<"chat" | "agents" | "context">("chat");
+  function navigate(value: "chat" | "agents" | "context") {
+    setPage(value);
+    setShowConversations(false);
+    useFiles.getState().close();
+  }
   const [projectId, setProjectId] = useState<string | null>(null);
   const [id, setId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -76,15 +85,10 @@ function Workspace() {
       return data ?? [];
     },
   });
-  const projects = useQuery({
-    queryKey: ["projects"],
-    enabled: !!me.data,
-    queryFn: async ({ signal }) => {
-      const { data, error } = await api.GET("/api/projects", { signal });
-      if (error || !data) throw new Error("项目读取失败");
-      return data;
-    },
-  });
+  useEffect(() => {
+    // Artifact selection belongs to a conversation, even when directories match.
+    useFiles.setState({ open: false, path: null, tabs: [] });
+  }, [id]);
   const currentConversation = conversations.data?.find((c) => c.id === id);
   const workspaceId = id
     ? (currentConversation?.directory_id ?? null)
@@ -114,6 +118,7 @@ function Workspace() {
   const createChat = useMutation({
     mutationFn: () => createConversation(projectId),
     onSuccess: async (data) => {
+      navigate("chat");
       setShowArchived(false);
       setId(data.id);
       setShowConversations(false);
@@ -249,6 +254,32 @@ function Workspace() {
             >
               新对话
             </AffectButton>
+            <nav
+              aria-label="工作空间导航"
+              className="flex flex-col gap-1 px-2 pb-3"
+            >
+              <Button
+                variant={page === "chat" ? "secondary" : "ghost"}
+                className="justify-start"
+                onClick={() => navigate("chat")}
+              >
+                对话工作空间
+              </Button>
+              <Button
+                variant={page === "agents" ? "secondary" : "ghost"}
+                className="justify-start"
+                onClick={() => navigate("agents")}
+              >
+                智能体库
+              </Button>
+              <Button
+                variant={page === "context" ? "secondary" : "ghost"}
+                className="justify-start"
+                onClick={() => navigate("context")}
+              >
+                知识与记忆
+              </Button>
+            </nav>
             <Navigation
               archived={showArchived}
               setArchived={setShowArchived}
@@ -257,12 +288,14 @@ function Workspace() {
               projectId={projectId}
               busy={running || busy}
               onSelect={(conversation) => {
+                navigate("chat");
                 setError("");
                 setId(conversation.id);
                 setProjectId(conversation.project_id);
                 setShowConversations(false);
               }}
               onProject={(project) => {
+                navigate("chat");
                 setShowArchived(false);
                 setId(null);
                 setProjectId(project);
@@ -318,7 +351,7 @@ function Workspace() {
           </aside>
         }
       >
-        <Workbench>
+        <Workbench conversationId={id}>
           <main className="workspace-main">
             <header className="chat-header">
               <Button
@@ -333,12 +366,16 @@ function Workspace() {
                 <PanelLeft />
               </Button>
               <span className="min-w-0 flex-1 truncate">
-                {id
-                  ? (conversations.data?.find((c) => c.id === id)?.title ??
-                    "新对话")
-                  : "工作空间"}
+                {page === "agents"
+                  ? "智能体库"
+                  : page === "context"
+                    ? "知识与记忆"
+                    : id
+                      ? (conversations.data?.find((c) => c.id === id)?.title ??
+                        "新对话")
+                      : "工作空间"}
               </span>
-              {id && (
+              {id && page === "chat" && (
                 <ReasoningSettings
                   id={id}
                   value={
@@ -348,27 +385,21 @@ function Workspace() {
                   running={running}
                 />
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                aria-expanded={filesOpen}
-                onClick={() =>
-                  filesOpen
-                    ? useFiles.getState().close()
-                    : useFiles.getState().show()
-                }
-              >
-                工作区文件
-              </Button>
+              {page === "chat" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-expanded={filesOpen}
+                  onClick={() =>
+                    filesOpen
+                      ? useFiles.getState().close()
+                      : useFiles.getState().show()
+                  }
+                >
+                  文件
+                </Button>
+              )}
             </header>
-            {id && workspaceId !== projectId && (
-              <p className="px-6 py-2 text-xs text-muted-foreground">
-                会话文件目录：
-                {projects.data?.find((p) => p.id === workspaceId)?.name ??
-                  "原文件目录"}
-                。文件面板与 Agent 均使用该目录。
-              </p>
-            )}
             {(error || createChat.error || conversations.error) && (
               <Alert variant="destructive">
                 <AlertDescription>
@@ -378,36 +409,61 @@ function Workspace() {
                 </AlertDescription>
               </Alert>
             )}
-            {id ? (
-              <Suspense fallback={<p className="p-6">正在加载对话…</p>}>
-                <Chat
-                  key={
-                    id +
-                    String(
-                      conversations.data?.find((c) => c.id === id)?.archived,
-                    )
-                  }
-                  id={id}
-                  onUnauthorized={clearSession}
-                />
-              </Suspense>
-            ) : (
-              <Suspense fallback={<p className="p-6">正在准备工作空间…</p>}>
-                <DraftChat
-                  key={projectId ?? "default"}
-                  projectId={projectId}
-                  onBusyChange={setStarting}
-                  onStarted={(conversationId) => {
-                    setShowArchived(false);
-                    setId(conversationId);
-                    setShowConversations(false);
-                    void query.invalidateQueries({
-                      queryKey: ["conversations"],
-                    });
-                  }}
-                />
-              </Suspense>
+            {page === "agents" && (
+              <Library
+                onStart={async (agent, creator = false) => {
+                  const value = await platformRequest<{ id: string }>(
+                    "/conversations",
+                    "POST",
+                    { agent_id: agent, creator },
+                  );
+                  setId(value.id);
+                  setProjectId(null);
+                  navigate("chat");
+                  await query.invalidateQueries({
+                    queryKey: ["conversations"],
+                  });
+                }}
+              />
             )}
+            {page === "context" && <ContextLibrary />}
+            <div
+              hidden={page !== "chat"}
+              className="chat-page min-h-0 flex-1 flex-col"
+            >
+              {id ? (
+                <Suspense fallback={<p className="p-6">正在加载对话…</p>}>
+                  <Chat
+                    key={
+                      id +
+                      String(
+                        conversations.data?.find((c) => c.id === id)?.archived,
+                      )
+                    }
+                    id={id}
+                    archived={!!currentConversation?.archived}
+                    active={page === "chat"}
+                    onUnauthorized={clearSession}
+                  />
+                </Suspense>
+              ) : (
+                <Suspense fallback={<p className="p-6">正在准备工作空间…</p>}>
+                  <DraftChat
+                    key={projectId ?? "default"}
+                    projectId={projectId}
+                    onBusyChange={setStarting}
+                    onStarted={(conversationId) => {
+                      setShowArchived(false);
+                      setId(conversationId);
+                      setShowConversations(false);
+                      void query.invalidateQueries({
+                        queryKey: ["conversations"],
+                      });
+                    }}
+                  />
+                </Suspense>
+              )}
+            </div>
           </main>
         </Workbench>
       </SidebarLayout>

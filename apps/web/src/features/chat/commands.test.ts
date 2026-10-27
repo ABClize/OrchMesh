@@ -25,7 +25,11 @@ test("a failed first send retains the created conversation for explicit retry", 
     "/api/conversations/{conversation_id}/runs",
     {
       params: { path: { conversation_id: "draft-1" } },
-      body: { text: "retry", review_tools: false },
+      body: {
+        text: "retry",
+        review_tools: false,
+        request_id: expect.any(String),
+      },
     },
   ]);
 });
@@ -68,6 +72,18 @@ test("first prompt creates its conversation in the selected project", async () =
   );
   expect(post.mock.calls[0]).toEqual([
     "/api/conversations",
-    { body: { project_id: "project-one" } },
+    { body: { project_id: "project-one", creator: false } },
   ]);
+});
+
+test("an uncertain HTTP failure reuses request identity on explicit retry", async () => {
+  const post = vi.spyOn(api, "POST");
+  post.mockResolvedValueOnce({
+    error: { detail: "unavailable" },
+    response: new Response(null, { status: 503 }),
+  } as never);
+  post.mockResolvedValueOnce({ data: {}, response: new Response() } as never);
+  await expect(sendPrompt("durable-retry", "same operation")).rejects.toThrow();
+  await sendPrompt("durable-retry", "same operation");
+  expect(post.mock.calls[0]).toEqual(post.mock.calls[1]);
 });

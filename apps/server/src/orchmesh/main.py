@@ -7,22 +7,17 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from .accounts import UserRead
-from .activity import router as activity_router
 from .auth import Auth, bearer
 from .bootstrap import bootstrap
 from .config import Settings
-from .dsh.manager import Busy, Manager
 from .logging import application_logging, failure, logger
-from .projects import owned_project
-from .projects import router as projects_router
-from .storage import Conversation, Database, Run, User
+from .projects import ProjectRead
+from .storage import Artifact, Conversation, Database, User
 from .workspace import router as workspace_router
 
 
@@ -43,6 +38,8 @@ class ConversationRead(BaseModel):
 
 
 class ConversationCreate(BaseModel):
+    agent_id: str | None = None
+    creator: bool = False
     project_id: uuid.UUID | None = None
 
 
@@ -57,7 +54,13 @@ class ReasoningPreference(BaseModel):
     reasoning: str = Field(max_length=32)
 
 
+class QuestionAnswer(BaseModel):
+    call_id: str
+    answer: dict
+
+
 class Prompt(BaseModel):
+    request_id: str = Field(default_factory=lambda: str(uuid.uuid4()), max_length=128)
     text: str = Field(min_length=1, max_length=32000)
     review_tools: bool = False
 
@@ -77,11 +80,16 @@ class Snapshot(BaseModel):
 
 
 def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
+    from .platform.catalog import router as catalog_router
+    from .platform.engine import ACTIVE, Engine
+    from .platform.protocol import Protocol
+    from .storage import Project, Task
+
     settings = settings or Settings()
     settings.secret()
     db = Database(settings)
-    manager = Manager(db, settings, containers)
-    auth = Auth(db, settings, on_login=manager.prewarm)
+    manager = Engine(db, settings)
+    auth = Auth(db, settings)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -89,28 +97,27 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             with application_logging(settings):
                 try:
-                    await manager.recover()
                     await bootstrap(db, settings)
+                    assert manager.protocol is not None
+                    await manager.protocol.initialize()
+                    await manager.start()
                     yield
                 finally:
                     await manager.close()
                     await db.engine.dispose()
 
-    app = FastAPI(
-        title="OrchMesh",
-        lifespan=lifespan,
-        openapi_url="/api/openapi.json",
-        responses={401: {"model": APIError}, 500: {"model": APIError}},
-    )
+    app = FastAPI(title="OrchMesh", lifespan=lifespan, openapi_url="/api/openapi.json")
     app.state.db, app.state.manager, app.state.auth = db, manager, auth
     app.include_router(auth.router)
-    app.include_router(activity_router(auth, db, manager))
     app.include_router(workspace_router(settings, auth, db))
-    app.include_router(projects_router(settings, auth, db, manager.navigation))
+    app.include_router(catalog_router(auth, db))
+    from .platform.inputs import router as inputs_router
 
-    @app.exception_handler(Busy)
-    async def busy_handler(request, exc):
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+    app.include_router(inputs_router(auth, db, settings))
+    from .platform.observation import router as observation_router
+
+    app.include_router(observation_router(auth, manager))
+    manager.protocol = Protocol(manager, auth, app)
 
     @app.middleware("http")
     async def request_log(request: Request, call_next):
@@ -134,22 +141,24 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
         response.headers["X-Request-ID"] = request_id
         return response
 
-    async def owned(conversation_id: str, user: User, session: AsyncSession):
-        conversation = await session.scalar(
-            select(Conversation).where(
-                Conversation.id == conversation_id, Conversation.user_id == user.id
-            )
-        )
-        if conversation is None:
-            raise HTTPException(404, "Conversation not found")
-        return conversation
+    def read(conversation):
+        return {
+            "id": conversation.id,
+            "title": conversation.title,
+            "reasoning": conversation.reasoning,
+            "project_id": conversation.directory_id,
+            "directory_id": conversation.directory_id,
+            "pinned": conversation.pinned,
+            "archived": conversation.archived,
+            "created_at": conversation.created_at,
+        }
 
-    async def owned_dependency(
-        conversation_id: str,
-        user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
-    ):
-        return await owned(conversation_id, user, session)
+    async def owned(identifier, user):
+        async with db.sessions() as session:
+            value = await session.get(Conversation, identifier)
+            if not value or value.user_id != user.id:
+                raise HTTPException(404, "Conversation not found")
+            return value
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:
@@ -157,257 +166,309 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
 
     @app.get("/api/me", response_model=UserRead)
     async def me(user: Annotated[User, Depends(auth.current_user)]):
-        manager.prewarm(user.id)
         return user
 
+    @app.get("/api/projects", response_model=list[ProjectRead])
+    async def projects(user: Annotated[User, Depends(auth.current_user)]) -> list[dict]:
+        async with db.sessions() as session:
+            rows = (
+                await session.scalars(select(Project).where(Project.user_id == user.id))
+            ).all()
+        return [
+            {"id": str(row.id), "name": row.name, "created_at": row.created_at}
+            for row in rows
+        ]
+
     @app.get("/api/conversations", response_model=list[ConversationRead])
-    async def conversations(
-        user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
-    ):
-        return (await manager.navigation.snapshot(user.id))["conversations"]
+    async def conversations(user: Annotated[User, Depends(auth.current_user)]):
+        async with db.sessions() as session:
+            rows = (
+                await session.scalars(
+                    select(Conversation)
+                    .where(Conversation.user_id == user.id)
+                    .order_by(Conversation.created_at.desc())
+                )
+            ).all()
+        return [read(row) for row in rows]
 
     @app.post("/api/conversations", response_model=ConversationRead, status_code=201)
     async def create_conversation(
         user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
         body: ConversationCreate | None = None,
     ):
-        project_id = body.project_id if body else None
-        project = (
-            await owned_project(session, user.id, project_id) if project_id else None
+        value = Conversation(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            agent_id=body.agent_id if body else None,
+            creator=body.creator if body else False,
         )
-        async with manager.navigation.transaction(user.id):
-            result = await manager.control(
-                user.id,
-                "session/create",
-                workspace_id=project_id,
-                **({"workspaceId": project.native_id} if project else {}),
-            )
-            conversation = Conversation(
-                id=result["sessionId"], user_id=user.id, directory_id=project_id
-            )
-            session.add(conversation)
-            await session.commit()
-        return await manager.navigation.conversation(user.id, conversation.id)
+        async with db.sessions.begin() as session:
+            session.add(value)
+        return read(value)
 
     @app.patch("/api/conversations/{conversation_id}", response_model=ConversationRead)
-    async def update_conversation(
+    async def update(
         conversation_id: str,
         body: ConversationUpdate,
         user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
     ):
-        await owned(conversation_id, user, session)
-        run = manager.active.get(user.id)
-        if body.archived and run and run.conversation_id == conversation_id:
-            raise HTTPException(409, "Stop the running task before archiving")
-        if body.title is not None:
-            async with manager.navigation.transaction(user.id):
-                await manager.control(
-                    user.id,
-                    "session/rename",
-                    conversation_id=conversation_id,
-                    sessionId=str(conversation_id),
-                    title=body.title.strip(),
-                )
-        changes = body.model_dump(exclude_none=True, exclude={"title"})
-        if changes:
-            await manager.navigation.update(user.id, conversation_id, **changes)
-        return await manager.navigation.conversation(user.id, conversation_id)
+        await owned(conversation_id, user)
+        async with db.sessions.begin() as session:
+            value = await session.get(Conversation, conversation_id)
+            for key, item in body.model_dump(exclude_none=True).items():
+                setattr(value, key, item.strip() if isinstance(item, str) else item)
+        return read(value)
 
     @app.post(
         "/api/conversations/{conversation_id}/fork",
         response_model=ConversationRead,
         status_code=201,
     )
-    async def fork_conversation(
-        conversation_id: str,
-        user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
+    async def fork(
+        conversation_id: str, user: Annotated[User, Depends(auth.current_user)]
     ):
-        source = await owned(conversation_id, user, session)
-        async with manager.navigation.transaction(user.id):
-            result = await manager.control(
-                user.id,
-                "session/fork",
-                conversation_id=conversation_id,
-                sessionId=str(conversation_id),
-            )
-            child = Conversation(
-                id=result["sessionId"],
-                user_id=user.id,
-                directory_id=source.directory_id,
-                reasoning=source.reasoning,
-            )
-            session.add(child)
-            await session.commit()
-        return await manager.navigation.conversation(user.id, child.id)
+        source = await owned(conversation_id, user)
+        state = await snapshot_for(source)
+        value = Conversation(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            title=source.title + " · 继续",
+            directory_id=source.directory_id,
+            reasoning=source.reasoning,
+            legacy_messages=state["messages"],
+            agent_id=source.agent_id,
+        )
+        async with db.sessions.begin() as session:
+            session.add(value)
+        return read(value)
 
     @app.get("/api/model")
-    async def model_info(user: Annotated[User, Depends(auth.current_user)]) -> dict:
-        try:
-            return await manager.model_info(user.id)
-        except Busy as exc:
-            raise HTTPException(409, str(exc)) from exc
-        except Exception as exc:
-            failure("model.info_failure", exc)
-            raise HTTPException(503, "模型能力读取失败，请检查配置") from None
+    async def model(user: Annotated[User, Depends(auth.current_user)]) -> dict:
+        return {
+            "id": settings.model_id,
+            "name": settings.model_id,
+            "provider": "project",
+            "efforts": [
+                {"id": key, "label": key}
+                for key in (settings.model_reasoning_efforts or {})
+            ],
+        }
 
     @app.put(
         "/api/conversations/{conversation_id}/reasoning",
         response_model=ConversationRead,
     )
-    async def reasoning_preference(
+    async def reasoning(
         conversation_id: str,
         body: ReasoningPreference,
         user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
     ):
-        conversation = await owned(conversation_id, user, session)
-        if user.id in manager.active:
-            raise HTTPException(409, "请先等待当前任务结束")
-        if body.reasoning != "default":
-            info = await model_info(user)
-            if body.reasoning not in [e["id"] for e in info["efforts"]]:
-                raise HTTPException(422, "模型不支持此思考等级")
-        conversation.reasoning = body.reasoning
-        await session.commit()
-        return await manager.navigation.conversation(user.id, conversation_id)
+        await owned(conversation_id, user)
+        if body.reasoning != "default" and body.reasoning not in (
+            settings.model_reasoning_efforts or {}
+        ):
+            raise HTTPException(422, "Unsupported reasoning level")
+        async with db.sessions.begin() as session:
+            value = await session.get(Conversation, conversation_id)
+            assert value is not None
+            value.reasoning = body.reasoning
+        return read(value)
 
-    async def snapshot_for(user, conversation_id, session):
-        try:
-            result = await manager.history(user.id, conversation_id)
-        except Busy as exc:
-            raise HTTPException(409, str(exc)) from exc
-        except (RuntimeError, TimeoutError) as exc:
-            failure("history.failure", exc, conversation_id=conversation_id)
-            raise HTTPException(503, "DSH 历史读取失败，请检查执行镜像和用户配置")
-        if result["status"] == "idle":
-            last = await session.scalar(
-                select(Run)
-                .where(Run.conversation_id == conversation_id)
-                .order_by(Run.created_at.desc())
-                .limit(1)
+    async def snapshot_for(conversation):
+        async with db.sessions() as session:
+            tasks = list(
+                (
+                    await session.scalars(
+                        select(Task)
+                        .where(
+                            Task.conversation_id == conversation.id,
+                            Task.parent_id.is_(None),
+                        )
+                        .order_by(Task.created_at)
+                    )
+                ).all()
             )
-            if last:
-                result["status"] = last.status
-                if last.status in ("failed", "interrupted"):
-                    result["error"] = "上次执行失败或中断，请检查配置后重新发送。"
-        return result
+        messages = list(conversation.legacy_messages)
+        for task in tasks:
+            projection = manager.live.get(task.id)
+            messages.extend(projection.messages if projection else task.messages)
+        last = tasks[-1] if tasks else None
+        status = (
+            ("running" if last.status in ACTIVE else last.status) if last else "idle"
+        )
+        return {
+            "messages": messages,
+            "status": status,
+            "run_id": last.id if last else None,
+            "cursor": len(messages),
+            "read_only": conversation.legacy,
+            "error": last.error if last else None,
+        }
 
     @app.get("/api/conversations/{conversation_id}", response_model=Snapshot)
     async def snapshot(
-        conversation_id: str,
-        user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
+        conversation_id: str, user: Annotated[User, Depends(auth.current_user)]
     ):
-        await owned(conversation_id, user, session)
-        return await snapshot_for(user, conversation_id, session)
+        return await snapshot_for(await owned(conversation_id, user))
 
     @app.post("/api/conversations/{conversation_id}/runs", status_code=202)
     async def send(
         conversation_id: str,
         body: Prompt,
         user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
     ) -> RunRead:
-        conversation = await owned(conversation_id, user, session)
-        state = await manager.navigation.conversation(user.id, conversation_id)
-        if state["archived"]:
-            raise HTTPException(409, "Restore the conversation before sending")
+        conversation = await owned(conversation_id, user)
+        if conversation.legacy or conversation.archived:
+            raise HTTPException(
+                409, "Continue this historical conversation in a new task"
+            )
         if not body.text.strip():
             raise HTTPException(422, "Message must not be blank")
-        try:
-            run = await manager.start(
-                user.id,
-                conversation_id,
-                body.text,
-                conversation.reasoning,
-                body.review_tools,
-            )
-        except Busy as exc:
-            raise HTTPException(409, str(exc)) from exc
-        return RunRead(id=run.id)
+        identifier = await manager.admit(
+            user.id, conversation_id, body.text, body.request_id
+        )
+        return RunRead(id=uuid.UUID(identifier))
 
     @app.post("/api/conversations/{conversation_id}/stop")
     async def stop(
-        conversation_id: str,
-        user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
+        conversation_id: str, user: Annotated[User, Depends(auth.current_user)]
     ) -> dict[str, str]:
-        await owned(conversation_id, user, session)
-        run = manager.active.get(user.id)
-        if run and run.conversation_id == conversation_id:
-            await manager.stop(run)
+        await owned(conversation_id, user)
+        await manager.stop(user.id, conversation_id)
         return {"status": "stopped"}
+
+    @app.get("/api/conversations/{conversation_id}/tasks")
+    async def tasks(
+        conversation_id: str, user: Annotated[User, Depends(auth.current_user)]
+    ) -> list[dict]:
+        await owned(conversation_id, user)
+        async with db.sessions() as session:
+            values = (
+                await session.scalars(
+                    select(Task)
+                    .where(
+                        Task.conversation_id == conversation_id,
+                        Task.owner_id == user.id,
+                    )
+                    .order_by(Task.created_at)
+                )
+            ).all()
+            artifacts = (
+                await session.scalars(
+                    select(Artifact).where(
+                        Artifact.conversation_id == conversation_id,
+                        Artifact.owner_id == user.id,
+                        Artifact.task_id != "input",
+                    )
+                )
+            ).all()
+        return [
+            {
+                "id": t.id,
+                "parent_id": t.parent_id,
+                "agent_id": t.agent_id,
+                "prompt": t.prompt,
+                "status": t.status,
+                "questions": t.questions,
+                "sandbox": t.sandbox,
+                "artifacts": [
+                    {
+                        "name": item.name,
+                        "size": item.size,
+                        "path": f"@artifacts/{item.id}/{item.name}",
+                    }
+                    for item in artifacts
+                    if item.task_id == t.id
+                ],
+            }
+            for t in values
+        ]
+
+    @app.post("/api/tasks/{task_id}/answers")
+    async def answer(
+        task_id: str,
+        body: QuestionAnswer,
+        user: Annotated[User, Depends(auth.current_user)],
+    ) -> dict:
+        from dbos import DBOS
+
+        from .storage import Answer
+
+        async with db.sessions.begin() as session:
+            task = await session.get(Task, task_id)
+            if not task or task.owner_id != user.id:
+                raise HTTPException(404, "Task not found")
+            key = f"{task_id}:{body.call_id}"
+            old = await session.get(Answer, key)
+            if old and old.answer != body.answer:
+                raise HTTPException(409, "Question already answered differently")
+            if not old:
+                pending = next(
+                    (q for q in task.questions if q["callId"] == body.call_id), None
+                )
+                if pending is None or task.status not in ("running", "waiting"):
+                    raise HTTPException(409, "Question is not pending")
+                answers = body.answer.get("answers")
+                expected = {q["id"] for q in pending["questions"]}
+                if (
+                    not isinstance(answers, list)
+                    or len(answers) != len(expected)
+                    or any(not isinstance(a, dict) for a in answers)
+                    or {a.get("id") for a in answers} != expected
+                    or any(
+                        not isinstance(a.get("selected", []), list)
+                        or not isinstance(a.get("custom", ""), str)
+                        or not (a.get("selected") or a.get("custom", "").strip())
+                        for a in answers
+                    )
+                ):
+                    raise HTTPException(422, "Answer every pending question")
+                session.add(
+                    Answer(
+                        id=key,
+                        task_id=task_id,
+                        call_id=body.call_id,
+                        answer=body.answer,
+                    )
+                )
+        await DBOS.send_async(
+            task_id, body.model_dump(), topic="answer", idempotency_key=key
+        )
+        return {"status": "accepted"}
+
+    async def event_owner(
+        conversation_id: str, user: Annotated[User, Depends(auth.current_user)]
+    ):
+        await owned(conversation_id, user)
 
     @app.get(
         "/api/conversations/{conversation_id}/events",
         response_class=EventSourceResponse,
-        dependencies=[Depends(owned_dependency)],
+        dependencies=[Depends(event_owner)],
     )
     async def events(
         conversation_id: str,
         request: Request,
         token: Annotated[str, Depends(bearer)],
         user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
     ) -> AsyncIterable[ServerSentEvent]:
-        run = manager.active.get(user.id)
-        if not run or run.conversation_id != conversation_id:
-            yield ServerSentEvent(
-                event="update",
-                data={
-                    "type": "snapshot",
-                    **await snapshot_for(user, conversation_id, session),
-                },
-            )
-            return
-        # Snapshot on connection avoids gaps, stale cursors and replay races.
-        cursor = run.sequence
-        yield ServerSentEvent(
-            event="update", data={"type": "snapshot", **run.snapshot()}, id=str(cursor)
-        )
-        while True:
+        conversation = await owned(conversation_id, user)
+        while not await request.is_disconnected():
             if not await auth.valid_token(token):
                 yield ServerSentEvent(event="unauthorized", data={})
                 return
-            if await request.is_disconnected():
+            state = await snapshot_for(conversation)
+            yield ServerSentEvent(event="update", data={"type": "snapshot", **state})
+            if state["status"] != "running":
                 return
-            if run.events and cursor < run.events[0][0] - 1:
-                cursor = run.sequence
-                yield ServerSentEvent(
-                    event="update",
-                    data={"type": "snapshot", **run.snapshot()},
-                    id=str(cursor),
-                )
-            else:
-                # Copy bounded queue; yielding allows producer to advance.
-                for sequence, event in list(run.events):
-                    if sequence > cursor:
-                        cursor = sequence
-                        yield ServerSentEvent(
-                            event="update", data=event, id=str(sequence)
-                        )
-            if run.finished and cursor == run.sequence:
-                return
-            run.changed.clear()
-            # Check sequence after clearing to avoid losing a wakeup.
-            if cursor != run.sequence:
-                continue
-            try:
-                await asyncio.wait_for(run.changed.wait(), timeout=1)
-            except TimeoutError:
-                yield ServerSentEvent(comment="keepalive")
+            await asyncio.sleep(0.3)
 
-    # Unknown API paths must not resolve to the SPA.
     @app.api_route(
         "/api/{path:path}",
-        methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+        methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
         include_in_schema=False,
     )
-    async def unknown_api(path: str):
+    async def unknown(path: str):
         raise HTTPException(404, "Not found")
 
     if settings.web_dir.is_dir():

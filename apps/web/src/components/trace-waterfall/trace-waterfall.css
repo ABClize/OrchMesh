@@ -1,0 +1,150 @@
+.trace-waterfall {
+  --trace-accent: var(--trace-branch, var(--primary));
+  font-size: 12px;
+}
+.trace-summary {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  padding: 12px 8px;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.trace-summary strong {
+  color: var(--foreground);
+}
+.trace-scroll {
+  overflow: auto;
+  max-height: 480px;
+}
+.trace-grid {
+  min-width: 640px;
+}
+.trace-axis,
+.trace-row {
+  display: grid;
+  grid-template-columns: 240px minmax(400px, 1fr);
+}
+.trace-axis {
+  position: sticky;
+  top: 0;
+  background: var(--background);
+  z-index: 1;
+  padding: 8px 0;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+}
+.trace-axis > span {
+  padding-left: 12px;
+}
+.trace-axis > div {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+}
+.trace-row {
+  min-height: 36px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
+  animation: trace-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.trace-row:hover,
+.trace-row[data-selected="true"] {
+  background: var(--muted);
+}
+.trace-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.trace-indent {
+  width: 24px;
+  flex-shrink: 0;
+}
+.trace-track {
+  position: relative;
+  cursor: pointer;
+  min-width: 0;
+  text-align: right;
+  background: repeating-linear-gradient(
+    to right,
+    var(--border) 0 1px,
+    transparent 1px 25%
+  );
+}
+.trace-track:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.trace-bar {
+  position: absolute;
+  top: 9px;
+  height: 18px;
+  min-width: 3px;
+  max-width: 100%;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--trace-accent) 22%, transparent);
+  border: 1px solid color-mix(in oklab, var(--trace-accent) 45%, transparent);
+  transition: width 220ms ease;
+}
+.trace-row[data-kind="tool"] {
+  --trace-accent: var(--trace-tool, var(--chart-2));
+}
+.trace-row[data-kind="event"] .trace-bar {
+  height: 8px;
+  top: 14px;
+}
+.trace-row[data-state="error"] {
+  --trace-accent: var(--destructive);
+}
+.trace-row[data-running="true"] .trace-bar {
+  background: repeating-linear-gradient(
+    110deg,
+    color-mix(in oklab, var(--trace-live, var(--primary)) 32%, transparent) 0
+      8px,
+    color-mix(in oklab, var(--trace-live, var(--primary)) 12%, transparent) 8px
+      16px
+  );
+  background-size: 32px 100%;
+  animation: trace-flow 1s linear infinite;
+}
+.trace-duration {
+  position: relative;
+  display: inline-block;
+  padding: 8px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+  text-shadow: 0 0 4px var(--background);
+}
+.trace-detail {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.trace-note {
+  color: var(--muted-foreground);
+  margin: 8px;
+  font-size: 11px;
+}
+@keyframes trace-flow {
+  to {
+    background-position: 32px 0;
+  }
+}
+@keyframes trace-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trace-waterfall * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

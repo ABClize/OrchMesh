@@ -1,64 +1,49 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Navigation } from "./Navigation";
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
-vi.mock("@/lib/api", () => ({ api: { GET: get } }));
-afterEach(() => {
-  cleanup();
-  vi.resetAllMocks();
-});
-
-function mount() {
-  const query = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+afterEach(cleanup);
+test("navigation preserves pinned history without booting a project runtime", () => {
+  const select = vi.fn();
+  const rows = [
+    { id: "ordinary", title: "普通会话", pinned: false, archived: false },
+    { id: "pinned", title: "已置顶历史", pinned: true, archived: false },
+    { id: "archived", title: "归档会话", pinned: false, archived: true },
+  ].map((row) => ({
+    ...row,
+    project_id: null,
+    directory_id: null,
+    created_at: "2026-10-27",
+    reasoning: "default",
+  }));
   render(
-    <QueryClientProvider client={query}>
+    <QueryClientProvider client={new QueryClient()}>
       <Navigation
         archived={false}
         setArchived={vi.fn()}
-        conversations={[]}
+        conversations={rows}
         id={null}
         projectId={null}
         busy={false}
-        onSelect={vi.fn()}
+        onSelect={select}
         onProject={vi.fn()}
         onArchive={vi.fn()}
       />
     </QueryClientProvider>,
   );
-}
-
-test("initial navigation distinguishes loading from an empty project list", async () => {
-  let finish!: (value: unknown) => void;
-  get.mockReturnValue(
-    new Promise((resolve) => {
-      finish = resolve;
-    }),
-  );
-  mount();
-  expect(screen.getByRole("status").textContent).toContain("正在加载项目");
-  expect(
-    screen
-      .getByRole("navigation", { name: "项目列表" })
-      .getAttribute("aria-busy"),
-  ).toBe("true");
-  finish({
-    data: [{ id: "p", name: "已存在的项目", created_at: "2026-10-26" }],
+  expect(screen.queryByRole("button", { name: "新建项目" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "归档会话" })).toBeNull();
+  const pinned = screen.getByRole("button", {
+    name: "已置顶历史",
+  });
+  fireEvent.click(pinned);
+  expect(select).toHaveBeenCalledWith(rows[1]);
+  const ordinary = screen.getByRole("button", {
+    name: "普通会话",
   });
   expect(
-    await screen.findByRole("button", { name: "已存在的项目" }),
+    pinned.compareDocumentPosition(ordinary) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
-  expect(screen.queryByRole("status")).toBeNull();
-});
-
-test("failed project load is visible instead of silently showing only ungrouped", async () => {
-  get.mockResolvedValue({ error: { detail: "unavailable" } });
-  mount();
-  expect((await screen.findByRole("alert")).textContent).toContain(
-    "项目加载失败",
-  );
 });

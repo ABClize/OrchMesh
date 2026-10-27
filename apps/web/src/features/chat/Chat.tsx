@@ -1,4 +1,17 @@
-import { ActivityPanel } from "./ActivityPanel";
+import { TaskInputs } from "../platform/TaskInputs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { useAgentGraph } from "@/features/observation/hooks";
+import { scopeGraph, isActive } from "@/features/observation/model";
+import {
+  FeedNotice,
+  LoadingObservation,
+} from "@/features/observation/Feedback";
+import {
+  ObservationWorkspace,
+  type Selection,
+} from "@/features/observation/ObservationWorkspace";
+import { useFiles } from "@/features/workspace/files";
 import {
   useEffect,
   useMemo,
@@ -30,15 +43,31 @@ const components = { Welcome, ToolFallback: AffectTool, ToolGroup: ToolCards };
 export function Chat({
   id,
   onUnauthorized,
+  active = true,
+  archived = false,
 }: {
   id: string;
   onUnauthorized: () => void;
+  active?: boolean;
+  archived?: boolean;
 }) {
   const state = useChat();
+  const readOnly = !!state.read_only || archived;
+  const [view, setView] = useState("chat");
+  const [selection, setSelection] = useState<Selection>(null);
+  const graph = useAgentGraph(id, active);
+  const filesOpen = useFiles((s) => s.open);
+  const latestRoot = graph.data.calls.filter((c) => !c.parent_id).at(-1);
+  const latest = scopeGraph(graph.data, latestRoot?.id ?? null);
+  const waiting = latest.calls.filter((c) => c.activity === "waiting_user");
+  function showObservation(taskId?: string) {
+    useFiles.getState().close();
+    if (taskId) setSelection({ kind: "task", id: taskId });
+    setView("observation");
+  }
   const mounted = useRef(true);
   const query = useQueryClient();
   const source = useRef<AbortController | null>(null);
-  const [reviewTools, setReviewTools] = useState(true);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState(false);
   const messages = useMemo(
@@ -122,7 +151,7 @@ export function Chat({
     convertMessage: (message) => message,
     isRunning: state.status === "running",
     isLoading: loading,
-    isDisabled: state.read_only,
+    isDisabled: readOnly,
     onNew: async (message) => {
       const text = message.content
         .filter((p) => p.type === "text")
@@ -130,7 +159,7 @@ export function Chat({
         .join("\n");
       useChat.setState({ status: "running", error: null });
       try {
-        await sendPrompt(id, text, reviewTools);
+        await sendPrompt(id, text);
         if (!mounted.current) return;
         subscribe();
         void query.invalidateQueries({ queryKey: ["conversations"] });
@@ -152,10 +181,10 @@ export function Chat({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div className="flex min-h-0 flex-1 flex-col">
-        {state.read_only && (
+        {readOnly && (
           <Alert className="mx-auto mt-3 max-w-3xl">
             <AlertDescription>
-              此对话为只读，请在侧栏恢复归档会话后继续。
+              此对话为只读。历史对话请从菜单创建分支；归档对话可恢复后继续。
             </AlertDescription>
           </Alert>
         )}
@@ -169,23 +198,92 @@ export function Chat({
             </AlertDescription>
           </Alert>
         )}
-        {!state.read_only && state.status !== "running" && (
-          <label className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 pt-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={reviewTools}
-              disabled={state.status === "running"}
-              onChange={(e) => setReviewTools(e.target.checked)}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
+          <Tabs
+            value={view}
+            onValueChange={(value) => {
+              if (value === "observation") showObservation();
+              else setView(value);
+            }}
+          >
+            <TabsList aria-label="对话视图">
+              <TabsTrigger value="chat">对话</TabsTrigger>
+              <TabsTrigger value="observation">协作</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {waiting.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => showObservation(waiting[0].id)}
+            >
+              {waiting.length} 次调用待回答
+            </Button>
+          )}
+        </div>
+        <div className="px-4 pt-2">
+          <FeedNotice {...graph} />
+        </div>
+        <div
+          hidden={view !== "chat"}
+          className="chat-conversation-view min-h-0 flex-1 flex-col"
+        >
+          {latest.calls.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 px-4 py-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => showObservation()}
+              >
+                {latest.nodes.length} 个智能体参与 ·{" "}
+                {latest.calls.filter((c) => isActive(c.status)).length}{" "}
+                次调用进行中 · 查看协作
+              </Button>
+            </div>
+          )}
+          <Thread
+            components={components}
+            readOnly={readOnly}
+            composerHeader={
+              !readOnly ? (
+                <TaskInputs
+                  id={id}
+                  disabled={loading || state.status === "running"}
+                />
+              ) : undefined
+            }
+          />
+        </div>
+        <div
+          hidden={view !== "observation" || !active || filesOpen}
+          className="min-h-0 flex-1 overflow-auto"
+        >
+          {graph.connection === "connecting" && !graph.data.calls.length ? (
+            <LoadingObservation />
+          ) : graph.connection === "error" &&
+            !graph.data.calls.length ? null : (
+            <ObservationWorkspace
+              active={view === "observation" && active && !filesOpen}
+              graph={graph.data}
+              readOnly={readOnly}
+              selection={selection}
+              onSelect={setSelection}
             />
-            本轮工具审批（每次执行前确认）
-          </label>
+          )}
+        </div>
+        {view === "observation" && filesOpen && (
+          <div className="p-6">
+            <p className="mb-3 text-sm text-muted-foreground">
+              正在预览调用中的文件。
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => useFiles.getState().close()}
+            >
+              返回协作详情
+            </Button>
+          </div>
         )}
-        <ActivityPanel
-          id={id}
-          running={state.status === "running"}
-          enabled={!loading}
-        />
-        <Thread components={components} />
       </div>
     </AssistantRuntimeProvider>
   );

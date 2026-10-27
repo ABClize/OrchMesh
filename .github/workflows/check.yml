@@ -16,5 +16,6 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
       - run: uv sync --directory apps/server --locked
       - run: npm --prefix apps/web ci
+      - run: npm --prefix apps/runtime ci --ignore-scripts
       - run: make check
       - run: make test

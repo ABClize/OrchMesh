@@ -1,5 +1,6 @@
 # DSH 执行层
 
+> 历史架构：每用户 Host/Controller 方案已被任务级执行替换。当前架构见 [智能体平台](agent-platform-v1.md)；本文保留用于解释旧数据。
 2026-10-26：使用 npm 发布的 `0.2.1-rc.3`，依赖锁在 `apps/runtime/package-lock.json`。核验与组成试验见 [Controller 研究](../research/dsh-controller-migration.md)。
 
 ## 官方接口与职责

@@ -1,51 +1,39 @@
-import asyncio
-import sys
-from pathlib import Path
-
 import httpx
 import pytest
 
 from orchmesh.accounts import UserCreate, create_account
 from orchmesh.config import Settings
-from orchmesh.dsh.containers import Containers
+from orchmesh.logging import application_logging
 from orchmesh.main import create_app
 from orchmesh.storage import Base
 
 PASSWORD = "test-password-only-123"
 
 
-class FakeContainers(Containers):
-    def command(self, user_id, conversation_id, project_id=None, *, control=False):
-        root = self.prepare(user_id)
-        return [
-            sys.executable,
-            str(Path(__file__).parent / "fixtures/fake_dsh.py"),
-            str(root / "dsh" / f"{conversation_id}.jsonl"),
-        ]
-
-    async def kill(self, user_id):
-        pass
-
-
 @pytest.fixture
 async def app(tmp_path):
     settings = Settings(
         _env_file=None,
+        database_dsn="",
+        data_dir=tmp_path,
         bootstrap_admin_email="",
         bootstrap_admin_password="",
         model_base_url="",
         model_api_key="",
         model_id="",
-        data_dir=tmp_path,
+        model_reasoning_efforts={"off": None, "high": "high"},
     )
-    app = create_app(settings, FakeContainers(settings))
+    app = create_app(settings)
     async with app.state.db.engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     async with app.state.db.sessions() as session:
         for email in ("one@example.com", "two@example.com"):
             await create_account(session, UserCreate(email=email, password=PASSWORD))
-    async with app.router.lifespan_context(app):
+    # HTTP boundary tests do not pretend an in-memory fake worker proves recovery.
+    # Real PostgreSQL/DBOS/DSH restart acceptance is a separate process-level suite.
+    with application_logging(settings):
         yield app
+    await app.state.db.engine.dispose()
 
 
 async def authenticated(app, email="one@example.com"):
@@ -58,11 +46,3 @@ async def authenticated(app, email="one@example.com"):
     assert response.status_code == 200, response.text
     client.headers["Authorization"] = "Bearer " + response.json()["access_token"]
     return client
-
-
-async def settle(app):
-    for _ in range(500):
-        if not app.state.manager.active:
-            return
-        await asyncio.sleep(0.01)
-    raise AssertionError("Run did not settle")

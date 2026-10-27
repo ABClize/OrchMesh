@@ -10,7 +10,7 @@ export function Welcome() {
         stagger={25}
         duration={500}
       />
-      <p>梳理想法、处理文件，或把一项任务交给 DSH。</p>
+      <p>梳理想法、处理文件，或把一项任务交给智能体。</p>
     </div>
   );
 }

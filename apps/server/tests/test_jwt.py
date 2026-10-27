@@ -1,6 +1,5 @@
 import uuid
 from contextlib import aclosing
-from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -31,23 +30,3 @@ async def test_invalid_tokens_rejected_for_api_and_stream(
         client.headers["Authorization"] = f"Bearer {token}"
         assert (await client.get("/api/me")).status_code == 401
         assert (await client.get(f"/api/conversations/{cid}/events")).status_code == 401
-
-
-async def test_expiry_closes_running_stream(app):
-    import asyncio
-
-    client = await authenticated(app)
-    async with aclosing(client):
-        user = (await client.get("/api/me")).json()
-        cid = (await client.post("/api/conversations")).json()["id"]
-        await client.post(f"/api/conversations/{cid}/runs", json={"text": "slow"})
-        client.headers["Authorization"] = "Bearer " + jwt.encode(
-            {"sub": user["id"], "exp": datetime.now(UTC) + timedelta(seconds=2)},
-            app.state.auth.secret,
-            algorithm="HS256",
-        )
-        result = await asyncio.wait_for(
-            client.get(f"/api/conversations/{cid}/events"), 5
-        )
-        assert "event: unauthorized" in result.text
-        assert app.state.manager.active

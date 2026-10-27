@@ -95,7 +95,7 @@ function Preview({ path }: { path: string }) {
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <p className="min-w-0 truncate" title={path}>
-          {path}
+          {path.split("/").at(-1)}
         </p>
         <Button
           variant="outline"
@@ -169,7 +169,11 @@ function Preview({ path }: { path: string }) {
   );
 }
 
-export function WorkspaceFiles() {
+export function WorkspaceFiles({
+  previewOnly = false,
+}: {
+  previewOnly?: boolean;
+}) {
   const {
     open,
     path,
@@ -184,7 +188,7 @@ export function WorkspaceFiles() {
   const running = useChat((s) => s.status === "running");
   const listing = useQuery({
     queryKey: ["workspace", projectId, folder],
-    enabled: open,
+    enabled: open && !previewOnly,
     queryFn: async ({ signal }) => {
       const { data, error } = await api.GET("/api/workspace/entries", {
         params: { query: { path: folder, project_id: projectId } },
@@ -193,7 +197,7 @@ export function WorkspaceFiles() {
       if (error || !data) throw new Error("目录读取失败，请刷新重试。");
       return data;
     },
-    refetchInterval: open && running ? 3000 : false,
+    refetchInterval: open && !previewOnly && running ? 3000 : false,
   });
   return (
     <section
@@ -212,62 +216,66 @@ export function WorkspaceFiles() {
           <X />
         </Button>
       </header>
-      <nav
-        aria-label="工作区目录"
-        className="flex max-h-48 min-h-28 shrink-0 flex-col border-b"
-      >
-        <div className="flex items-center gap-1 px-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="上级目录"
-            disabled={!folder}
-            onClick={() => setFolder(folder.split("/").slice(0, -1).join("/"))}
-          >
-            <ArrowLeft />
-          </Button>
-          <span
-            className="min-w-0 flex-1 truncate text-xs"
-            title={folder || "/"}
-          >
-            /{folder}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="刷新文件列表"
-            onClick={() => void listing.refetch()}
-          >
-            <RefreshCw />
-          </Button>
-        </div>
-        <div className="flex flex-col overflow-auto px-2 pb-2">
-          {listing.isPending && <p className="p-2 text-sm">正在读取目录…</p>}
-          {listing.error && <p role="alert">{listing.error.message}</p>}
-          {listing.data?.entries.length === 0 && (
-            <p className="p-2 text-sm text-muted-foreground">
-              此目录还没有文件。
-            </p>
-          )}
-          {listing.data?.truncated && (
-            <p>仅显示前 500 项，请进入子目录查看。</p>
-          )}
-          {listing.data?.entries.map((entry) => (
+      {!previewOnly && (
+        <nav
+          aria-label="工作区目录"
+          className="flex max-h-48 min-h-28 shrink-0 flex-col border-b"
+        >
+          <div className="flex items-center gap-1 px-2">
             <Button
-              key={entry.path}
-              variant={path === entry.path ? "secondary" : "ghost"}
-              className="justify-start"
-              title={entry.path}
+              variant="ghost"
+              size="icon"
+              aria-label="上级目录"
+              disabled={!folder}
               onClick={() =>
-                entry.directory ? setFolder(entry.path) : show(entry.path)
+                setFolder(folder.split("/").slice(0, -1).join("/"))
               }
             >
-              {entry.directory ? <Folder /> : <FileText />}
-              <span className="min-w-0 truncate">{entry.name}</span>
+              <ArrowLeft />
             </Button>
-          ))}
-        </div>
-      </nav>
+            <span
+              className="min-w-0 flex-1 truncate text-xs"
+              title={folder || "/"}
+            >
+              /{folder}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="刷新文件列表"
+              onClick={() => void listing.refetch()}
+            >
+              <RefreshCw />
+            </Button>
+          </div>
+          <div className="flex flex-col overflow-auto px-2 pb-2">
+            {listing.isPending && <p className="p-2 text-sm">正在读取目录…</p>}
+            {listing.error && <p role="alert">{listing.error.message}</p>}
+            {listing.data?.entries.length === 0 && (
+              <p className="p-2 text-sm text-muted-foreground">
+                此目录还没有文件。
+              </p>
+            )}
+            {listing.data?.truncated && (
+              <p>仅显示前 500 项，请进入子目录查看。</p>
+            )}
+            {listing.data?.entries.map((entry) => (
+              <Button
+                key={entry.path}
+                variant={path === entry.path ? "secondary" : "ghost"}
+                className="justify-start"
+                title={entry.path}
+                onClick={() =>
+                  entry.directory ? setFolder(entry.path) : show(entry.path)
+                }
+              >
+                {entry.directory ? <Folder /> : <FileText />}
+                <span className="min-w-0 truncate">{entry.name}</span>
+              </Button>
+            ))}
+          </div>
+        </nav>
+      )}
       {path ? (
         <Tabs
           value={path}

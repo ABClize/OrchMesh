@@ -4,12 +4,9 @@ import getpass
 import os
 import subprocess
 
-from sqlalchemy import select
-
 from .accounts import UserCreate, create_account
 from .config import Settings
-from .dsh.containers import Containers
-from .storage import Database, User
+from .storage import Database
 
 
 async def create_user(email: str):
@@ -24,39 +21,34 @@ async def create_user(email: str):
             user = await create_account(
                 session, UserCreate(email=email, password=password)
             )
-            root = Containers(settings).prepare(user.id)
-            print(
-                f"Created {user.email}\nUser ID: {user.id}\n"
-                f"Model config: {root / 'config'}"
-            )
+            print(f"Created {user.email}; User ID: {user.id}")
     finally:
         await db.engine.dispose()
 
 
-async def configure_model(email: str, base_url: str, model: str, api: str):
-    from pydantic import SecretStr
+def setup():
+    """Prepare dependencies elsewhere; generate local DB credentials once."""
+    import secrets
 
-    from .dsh.configuration import sync_model, validate_model
+    from .config import ROOT
 
-    settings = Settings().model_copy(
-        update={
-            "model_base_url": base_url,
-            "model_id": model,
-            "model_api": api,
-            "model_api_key": SecretStr(getpass.getpass("Model API key: ")),
-        }
+    path = ROOT / ".env"
+    if not path.exists():
+        path.write_text((ROOT / ".env.example").read_text())
+        path.chmod(0o600)
+    content = path.read_text()
+    lines = content.splitlines()
+    if not any(
+        line.startswith("ORCHMESH_DB_PASSWORD=") and line.partition("=")[2]
+        for line in lines
+    ):
+        lines = [line for line in lines if not line.startswith("ORCHMESH_DB_PASSWORD=")]
+        lines.append("ORCHMESH_DB_PASSWORD=" + secrets.token_urlsafe(32))
+        path.write_text("\n".join(lines) + "\n")
+        path.chmod(0o600)
+    subprocess.run(
+        ["docker", "compose", "up", "-d", "--wait", "db"], cwd=ROOT, check=True
     )
-    validate_model(settings)
-    db = Database(settings)
-    try:
-        async with db.sessions() as session:
-            user = await session.scalar(select(User).where(User.email == email))
-            if user is None:
-                raise SystemExit("User not found")
-            sync_model(settings, user.id)
-            print("Model configured for this user; effective on the next run.")
-    finally:
-        await db.engine.dispose()
 
 
 def main():
@@ -68,11 +60,8 @@ def main():
     sub.add_parser("build-image")
     create = sub.add_parser("create-user")
     create.add_argument("email")
-    config = sub.add_parser("configure-model")
-    config.add_argument("email")
-    config.add_argument("--base-url", required=True)
-    config.add_argument("--model", required=True)
-    config.add_argument("--api", default="openai-completions")
+    sub.add_parser("setup")
+    sub.add_parser("import-legacy")
     args = parser.parse_args()
     if args.command in ("run", "dev"):
         from .serve import serve
@@ -86,7 +75,7 @@ def main():
                 "docker",
                 "build",
                 "-f",
-                "deploy/dsh.Dockerfile",
+                "deploy/sandbox.Dockerfile",
                 "-t",
                 Settings().dsh_image,
                 ".",
@@ -96,5 +85,9 @@ def main():
         )
     elif args.command == "create-user":
         asyncio.run(create_user(args.email))
-    else:
-        asyncio.run(configure_model(args.email, args.base_url, args.model, args.api))
+    elif args.command == "setup":
+        setup()
+    elif args.command == "import-legacy":
+        from .import_legacy import migrate
+
+        print(asyncio.run(migrate(Settings())))

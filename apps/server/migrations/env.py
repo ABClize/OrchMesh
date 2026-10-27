@@ -59,7 +59,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, target_metadata=target_metadata,
+        # DBOS and A2A own their schemas; Alembic manages only business tables.
+        include_name=lambda name, kind, parents: kind != "table" or name in target_metadata.tables,
+    )
 
     with context.begin_transaction():
         context.run_migrations()

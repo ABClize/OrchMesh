@@ -13,7 +13,8 @@ async def test_files_auth_download_range_and_user_boundary(app):
     one, two = await authenticated(app), await authenticated(app, "two@example.com")
     async with aclosing(one), aclosing(two):
         uid = uuid.UUID((await one.get("/api/me")).json()["id"])
-        root = app.state.manager.containers.prepare(uid) / "work"
+        root = app.state.manager.settings.data_dir / "users" / str(uid) / "work"
+        root.mkdir(parents=True, exist_ok=True)
         (root / "报告.txt").write_text("hello world")
         listing = await one.get("/api/workspace/entries")
         assert listing.status_code == 200
@@ -52,7 +53,8 @@ async def test_links_special_files_and_large_files_are_not_served(app, tmp_path)
     client = await authenticated(app)
     async with aclosing(client):
         uid = uuid.UUID((await client.get("/api/me")).json()["id"])
-        root = app.state.manager.containers.prepare(uid) / "work"
+        root = app.state.manager.settings.data_dir / "users" / str(uid) / "work"
+        root.mkdir(parents=True, exist_ok=True)
         secret = tmp_path / "outside"
         secret.write_text("secret")
         (root / "link").symlink_to(secret)
@@ -84,26 +86,3 @@ def test_open_descriptor_survives_path_replacement(tmp_path):
         assert os.read(fd, 100) == b"allowed"
     finally:
         os.close(fd)
-
-
-async def test_reasoning_setting_is_owned_validated_and_persisted(app, monkeypatch):
-    async def info(uid):
-        return {
-            "model": "test",
-            "efforts": [{"id": "off", "name": "Off"}, {"id": "high", "name": "High"}],
-        }
-
-    monkeypatch.setattr(app.state.manager, "model_info", info)
-    one, two = await authenticated(app), await authenticated(app, "two@example.com")
-    async with aclosing(one), aclosing(two):
-        cid = (await one.post("/api/conversations")).json()["id"]
-        url = f"/api/conversations/{cid}/reasoning"
-        assert (await two.put(url, json={"reasoning": "off"})).status_code == 404
-        assert (await one.put(url, json={"reasoning": "invented"})).status_code == 422
-        assert (await one.put(url, json={"reasoning": "off"})).json()[
-            "reasoning"
-        ] == "off"
-        assert (await one.get("/api/conversations")).json()[0]["reasoning"] == "off"
-        assert (await one.put(url, json={"reasoning": "default"})).json()[
-            "reasoning"
-        ] == "default"

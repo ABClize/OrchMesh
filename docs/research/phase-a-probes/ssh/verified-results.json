@@ -1,0 +1,151 @@
+{
+  "date": "2026-10-27",
+  "evidence_directory": "/tmp/orchmesh-phase-a-ssh-ykk4urpc",
+  "runner": "python docs/research/phase-a-probes/ssh/run.py",
+  "model": "deterministic official LlmAdapter",
+  "provider": {
+    "hello": {
+      "protocol": 2,
+      "hash": "d20e6ba7e62210129e08b9c6f3dab343452dafe54c9a3413e33c937820aadb04",
+      "kind": "node-script",
+      "platform": "linux",
+      "nodeVersion": "v24.22.1",
+      "executable": "/usr/local/bin/node",
+      "root": "/tmp/dsh-ssh-3I3Ymn",
+      "workspace": "/workspace",
+      "bootstrapHash": "e25ce53b26bb3e96e62cb7433f74612395f3865b4627a695d3d4fd42c4706790"
+    },
+    "ptc": {
+      "logs": [],
+      "value": {
+        "cwd": "/workspace",
+        "env": []
+      },
+      "sandbox": {
+        "mode": "workspace-write",
+        "denied": false,
+        "enforcement": "full"
+      }
+    },
+    "rg": {
+      "exitCode": 0,
+      "signal": null,
+      "stdout": "PTC_REMOTE\n",
+      "stderr": ""
+    },
+    "fs": true,
+    "readonly": true,
+    "subprocess": true,
+    "sandbox": {
+      "policy": {
+        "argv": [
+          "/opt/probe/node_modules/@deepseek-ai/node-addon-system-linux-x64/bin/landlock-run",
+          "--ro",
+          "/",
+          "--rw",
+          "/dev/null",
+          "--rw",
+          "/tmp",
+          "--rw",
+          "/workspace",
+          "--",
+          "/bin/bash",
+          "-c",
+          "printf \"confined\n\" > confined.txt"
+        ],
+        "enforcement": "full",
+        "denialSignatures": [
+          "permission denied"
+        ],
+        "runnerFailureRules": [
+          {
+            "fatalSignatures": [
+              "landlock-run: "
+            ],
+            "allowedExitCodes": [
+              125
+            ],
+            "informationalLines": [
+              "landlock-run: partial enforcement (older Landlock ABI)"
+            ]
+          }
+        ]
+      },
+      "result": {
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    "cancel": {
+      "exitCode": null,
+      "signal": "SIGTERM"
+    },
+    "isolation": true,
+    "artifact": true
+  },
+  "lifecycle": [
+    {
+      "phase": "ordinary",
+      "containers": 0,
+      "evidence": "session-plain.json"
+    },
+    {
+      "phase": "remote",
+      "container": "dcb3218b532eaf8de843357a96d7524531c58e4b105d3d6f0cf8a6a3579db575",
+      "session": {
+        "phase": "remote",
+        "calls": 2,
+        "sessionId": "same-task-session",
+        "remote": true
+      },
+      "artifact_after_removal": "RESTORED_INPUT\nARTIFACT\n"
+    },
+    {
+      "phase": "recreated",
+      "container": "74d2a65886ae64bc958536ed1973db1631557005c347fd9eb0ee5fd4b7f0f9c9",
+      "session": {
+        "phase": "recreated",
+        "calls": 2,
+        "sessionId": "same-task-session",
+        "remote": true
+      },
+      "artifact_after_removal": "RESTORED_INPUT\nARTIFACT\n"
+    }
+  ],
+  "native_tool_results": [
+    {
+      "callId": "native-1",
+      "isError": false
+    },
+    {
+      "callId": "native-2",
+      "isError": false
+    },
+    {
+      "callId": "native-3",
+      "isError": false
+    },
+    {
+      "callId": "native-4",
+      "isError": false
+    }
+  ],
+  "transport_loss": {
+    "error": "Error: SSH helper disconnected; outcome is unknown"
+  },
+  "question": {
+    "duplicate": "REPLY_QUEUED",
+    "reply_count": 1,
+    "calls_after_resume": 1
+  },
+  "preset": {
+    "old": "report-v1",
+    "new": "report-v2",
+    "observed_system_markers": [
+      "VERSION_V1",
+      "VERSION_V2"
+    ]
+  }
+}

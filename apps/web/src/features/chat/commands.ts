@@ -1,9 +1,12 @@
-import { getToken } from "../../lib/session";
+import { getToken, watchSession } from "../../lib/session";
 import { api } from "../../lib/api";
+
+const pending = new Map<string, { text: string; id: string }>();
+watchSession(() => pending.clear());
 
 export async function createConversation(projectId: string | null = null) {
   const { data, error } = await api.POST("/api/conversations", {
-    body: { project_id: projectId },
+    body: { project_id: projectId, creator: false },
   });
   if (error || !data) throw new Error("创建对话失败");
   return data;
@@ -14,13 +17,21 @@ export async function sendPrompt(
   text: string,
   reviewTools = false,
 ) {
+  const previous = pending.get(id);
+  const requestId = previous?.text === text ? previous.id : crypto.randomUUID();
+  pending.set(id, { text, id: requestId });
   const { error, response } = await api.POST(
     "/api/conversations/{conversation_id}/runs",
     {
       params: { path: { conversation_id: id } },
-      body: { text, review_tools: reviewTools },
+      body: {
+        text,
+        review_tools: reviewTools,
+        request_id: requestId,
+      },
     },
   );
+  if (!error || response.status < 500) pending.delete(id);
   if (error)
     throw new Error(
       response.status === 409

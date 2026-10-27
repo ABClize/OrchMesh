@@ -20,13 +20,12 @@ open log files. Console output and daily files receive the same application even
 
 ```bash
 tail -F .data/logs/orchmesh.log
-rg 'run.failure|run.cleanup_failure|rpc.read_failure' .data/logs/orchmesh.log*
+rg 'task.worker_exit|http.failure' .data/logs/orchmesh.log*
 ```
 
 HTTP logs contain a server-generated request ID (also in `X-Request-ID`), method,
 route template, status and time until response headers. For SSE this is **not**
-the full stream duration. Run logs contain user/conversation/run UUIDs, lifecycle
-and failure stage; RPC shutdown records exit code and stderr byte count. These
+the full stream duration. Worker logs contain task IDs, exit codes and drained stderr byte counts. These
 are application diagnostics, not a durable audit trail or raw Uvicorn access log.
 
 ## Sensitive data
@@ -42,3 +41,11 @@ errors cannot be safely separated from secrets.
 Tests simulate rollover, retention and restart without waiting for midnight,
 check handler cleanup, and verify that exception text, queries and tokens do not
 appear in the application log. CI never uses personal credentials or a real model.
+
+## Task persistence versus logs
+
+DSH session JSONL and DBOS/PostgreSQL workflow records contain task inputs and
+results needed for recovery. They are private application data, not daily log files.
+Back them up with task inputs and artifacts; never publish them as debug logs.
+Earlier migration experiments retained task-local `runtime.log` diagnostics; those
+files remain local and ignored. New workers drain stderr without persisting it.

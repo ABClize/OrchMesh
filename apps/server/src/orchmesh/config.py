@@ -24,12 +24,24 @@ class Settings(BaseSettings):
     model_api: str = "openai-completions"
     model_api_key: SecretStr = SecretStr("")
     model_id: str = ""
+    http_proxy: SecretStr = SecretStr("")
+    no_proxy: str = "localhost,127.0.0.1,::1"
+    search_api_key: SecretStr = SecretStr("")
+    search_base_url: str = "https://api.deepseek.com/anthropic/v1"
+    search_model: str = "deepseek-v4-flash"
     model_reasoning_efforts: dict[str, str | None] | None = None
     model_thinking_format: Literal["deepseek"] | None = None
     access_token_expire_minutes: int = Field(default=60, ge=1)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_retention_days: int = Field(default=30, ge=1)
-    dsh_image: str = "orchmesh-dsh:0.2.1-rc.3"
+    database_dsn: SecretStr = Field(
+        default=SecretStr(""), validation_alias="ORCHMESH_DATABASE_URL"
+    )
+    db_password: SecretStr = SecretStr("")
+    db_port: int = 5433
+    dsh_image: str = "orchmesh-sandbox:0.2.1-rc.3"
+    runtime_dir: Path = ROOT / "apps/runtime"
+    sandbox_idle_seconds: int = Field(default=300, ge=1)
     max_active_runs: int = Field(default=4, ge=1)
     runtime_idle_seconds: int = Field(default=600, ge=1)
     run_timeout: int = 1800
@@ -37,6 +49,16 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        if self.database_dsn.get_secret_value():
+            return self.database_dsn.get_secret_value()
+        if self.db_password.get_secret_value():
+            from urllib.parse import quote
+
+            password = quote(self.db_password.get_secret_value(), safe="")
+            return (
+                f"postgresql+psycopg://orchmesh:{password}"
+                f"@127.0.0.1:{self.db_port}/orchmesh"
+            )
         return f"sqlite+aiosqlite:///{self.data_dir}/platform.sqlite3"
 
     def secret(self) -> str:

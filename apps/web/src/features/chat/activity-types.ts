@@ -1,7 +1,14 @@
-import type { components } from "@/lib/api-schema";
-
-export type Action = Omit<components["schemas"]["ActivityAction"], "mode"> & {
+// Retained only for rendering archived interaction cards.
+export type Action = {
+  kind: "answer" | "prompt" | "queue" | "child-stop";
+  request_id?: string;
+  outcome?: "allowed-once" | "rejected";
+  answers?: { id: string; selected: string[]; custom?: string }[];
+  text?: string;
   mode?: "queue" | "steer";
+  item_id?: string;
+  action?: "edit" | "remove" | "steer";
+  child_id?: string;
 };
 export type Question = {
   id: string;

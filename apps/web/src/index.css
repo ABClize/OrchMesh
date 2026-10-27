@@ -412,3 +412,60 @@
     display: none;
   }
 }
+
+/* Observation shares the application tokens; the graph is read-only. */
+.chat-conversation-view:not([hidden]) {
+  display: flex;
+}
+.observation-workspace {
+  padding: 1rem;
+  min-width: 0;
+}
+.observation-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+.observation-inspector {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.task-output {
+  height: 420px;
+  min-width: 0;
+}
+.task-output .aui-thread-root {
+  min-width: 0;
+}
+.platform-page {
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(16px, 3vw, 36px);
+}
+.platform-page-inner {
+  max-width: 960px;
+  margin: 0 auto;
+}
+@media (min-width: 1100px) {
+  .observation-columns[data-inspecting="true"] {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 38%);
+  }
+  .observation-inspector {
+    border-left: 1px solid var(--border);
+    padding-left: 1.25rem;
+  }
+}
+@media (max-width: 767px) {
+  .observation-workspace {
+    padding: 1rem;
+  }
+  .task-output {
+    height: 55dvh;
+  }
+  .chat-header {
+    flex-wrap: wrap;
+  }
+}
+.chat-page:not([hidden]) {
+  display: flex;
+}

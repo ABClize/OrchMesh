@@ -1,15 +1,13 @@
 import uuid
 from pathlib import Path
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .auth import Auth
 from .config import Settings
-from .storage import Database, Project, User
+from .storage import Project
 
 
 def workspace_path(
@@ -44,75 +42,3 @@ class ProjectRead(BaseModel):
     id: uuid.UUID
     name: str
     created_at: str
-
-
-def router(settings: Settings, auth: Auth, db: Database, navigation):
-    api = APIRouter(prefix="/api/projects", tags=["projects"])
-
-    @api.get("", response_model=list[ProjectRead])
-    async def listing(
-        user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
-    ):
-        return (await navigation.snapshot(user.id))["projects"]
-
-    @api.post("", response_model=ProjectRead, status_code=201)
-    async def create(
-        body: ProjectCreate,
-        user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
-    ):
-        project = Project(id=uuid.uuid4(), user_id=user.id)
-        workspace_path(settings, user.id, project.id).mkdir(parents=True, mode=0o700)
-        async with navigation.transaction(user.id):
-            result = await navigation.manager.control(
-                user.id,
-                "project/create",
-                path=f"/workspaces/{project.id}",
-                title=body.name.strip(),
-            )
-            project.native_id = result["workspace"]["workspaceId"]
-            session.add(project)
-            await session.commit()
-        return {
-            "id": project.id,
-            "name": result["workspace"]["title"],
-            "created_at": project.created_at,
-        }
-
-    @api.patch("/{project_id}", response_model=ProjectRead)
-    async def update(
-        project_id: uuid.UUID,
-        body: ProjectUpdate,
-        user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
-    ):
-        project = await owned_project(session, user.id, project_id)
-        async with navigation.transaction(user.id):
-            result = await navigation.manager.control(
-                user.id,
-                "project/rename",
-                workspaceId=project.native_id,
-                title=body.name.strip(),
-            )
-        return {
-            "id": project.id,
-            "name": result["workspace"]["title"],
-            "created_at": project.created_at,
-        }
-
-    @api.delete("/{project_id}")
-    async def remove(
-        project_id: uuid.UUID,
-        user: Annotated[User, Depends(auth.current_user)],
-        session: Annotated[AsyncSession, Depends(db.session)],
-    ) -> dict[str, bool]:
-        project = await owned_project(session, user.id, project_id)
-        async with navigation.transaction(user.id):
-            await navigation.manager.control(
-                user.id, "project/delete", workspaceId=project.native_id
-            )
-        # Retain the directory ownership row: existing sessions and files still use it.
-        return {"deleted": True}
-
-    return api

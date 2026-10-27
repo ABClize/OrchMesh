@@ -3,17 +3,19 @@
 
 help:
 	@printf '%s\n' \
-	  'make setup  安装锁定依赖、准备 .env、构建 DSH 镜像（首次/升级）' \
+	  'make setup  安装锁定依赖、准备 PostgreSQL 与按需沙盒镜像（首次/升级）' \
 	  'make dev    启动前后端热更新；Ctrl+C 一起停止' \
 	  'make run    构建页面并启动单服务；Ctrl+C 停止' \
 	  'make check  Lint 与类型检查' \
-	  'make test   构建并运行测试；ORCHMESH_TEST_DOCKER=1 可加测真实运行时' \
+	  'make test   构建并运行确定性测试（真实模型验收另见文档）' \
 	  '端口、初始账号和模型配置统一编辑根目录 .env。'
 
 setup:
 	uv sync --directory apps/server --locked
 	npm --prefix apps/web ci
+	npm --prefix apps/runtime ci --ignore-scripts
 	@test -f .env || (umask 077; cp .env.example .env)
+	uv run --directory apps/server orchmesh setup
 	uv run --directory apps/server orchmesh build-image
 
 dev:
@@ -24,9 +26,10 @@ run:
 	uv run --directory apps/server orchmesh run
 
 check:
-	node --check apps/runtime/bridge.mjs
-	node --check apps/runtime/interactions.mjs
-	node --check apps/runtime/launch.mjs
+	node --check apps/runtime/task-worker.mjs
+	node --check apps/runtime/task-remote.mjs
+	node --check apps/runtime/export-history.mjs
+	node --check apps/runtime/observe-session.mjs
 	uv run --directory apps/server ruff check src tests
 	uv run --directory apps/server ruff format --check src tests
 	uv run --directory apps/server pyright src

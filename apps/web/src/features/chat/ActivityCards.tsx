@@ -19,11 +19,11 @@ export function RequestCard({
   >({});
   return (
     <div
-      className="space-y-3 rounded-xl border bg-background p-3"
+      className="flex flex-col gap-3 rounded-xl border bg-background p-3"
       aria-label={request.kind === "approval" ? "工具审批" : "等待你的回答"}
     >
       {actor && (
-        <p className="text-xs text-muted-foreground">来自子任务：{actor}</p>
+        <p className="text-xs text-muted-foreground">来自调用：{actor}</p>
       )}
       {request.kind === "approval" ? (
         <>
@@ -63,7 +63,7 @@ export function RequestCard({
         </>
       ) : (
         <form
-          className="space-y-3"
+          className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             void act({
@@ -79,7 +79,11 @@ export function RequestCard({
         >
           <p className="font-medium">等待你的回答</p>
           {request.questions?.map((q) => (
-            <fieldset key={q.id} className="space-y-2">
+            <fieldset
+              key={q.id}
+              disabled={disabled}
+              className="flex min-w-0 flex-col gap-2"
+            >
               <legend className="font-medium">{q.question}</legend>
               {q.detail && (
                 <p className="whitespace-pre-wrap text-muted-foreground">

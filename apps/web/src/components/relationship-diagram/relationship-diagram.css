@@ -1,0 +1,75 @@
+.relationship-diagram-scroll {
+  overflow-x: auto;
+  padding: 3px;
+}
+.relationship-diagram {
+  position: relative;
+  margin-inline: auto;
+  --diagram-duration: 220ms;
+  --diagram-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.relationship-connectors {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.relationship-line {
+  fill: none;
+  stroke: var(--diagram-line, currentColor);
+  stroke-width: 1.7;
+  transition:
+    stroke var(--diagram-duration) var(--diagram-ease),
+    stroke-width var(--diagram-duration) var(--diagram-ease);
+}
+.relationship-connector[data-selected="true"] .relationship-line {
+  stroke: var(--diagram-accent, currentColor);
+  stroke-width: 2.5;
+}
+.relationship-flow {
+  fill: none;
+  stroke: var(--diagram-running, currentColor);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 5 14;
+  animation: relationship-travel 1s linear infinite;
+}
+.relationship-node {
+  position: absolute;
+  animation: relationship-enter var(--diagram-duration) var(--diagram-ease);
+}
+.relationship-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+.relationship-label[data-selected="true"] {
+  outline: 2px solid var(--diagram-accent, currentColor);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+@keyframes relationship-travel {
+  to {
+    stroke-dashoffset: -38;
+  }
+}
+@keyframes relationship-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .relationship-diagram *,
+  .relationship-diagram *::before,
+  .relationship-diagram *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .relationship-flow {
+    display: none;
+  }
+}

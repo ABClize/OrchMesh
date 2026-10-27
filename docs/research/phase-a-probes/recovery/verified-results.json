@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-27",
+  "evidence_directory": "/tmp/orchmesh-phase-a-recovery-tngplpma",
+  "command": "python docs/research/phase-a-probes/recovery/run.py --real-env /project/OrchMesh/.env",
+  "versions": {
+    "dbos": "3.3.0",
+    "a2a-sdk": "1.2.3",
+    "DSH": "0.2.1-rc.3",
+    "FastAPI": "0.162.0",
+    "PostgreSQL": "16.10"
+  },
+  "scenarios": [
+    {
+      "name": "Atomic Task and official enqueue rollback",
+      "passed": true
+    },
+    {
+      "name": "stream recovery",
+      "passed": true,
+      "task": "stream-afaa4dbf",
+      "effectCount": 1
+    },
+    {
+      "name": "after-dsh recovery",
+      "passed": true,
+      "task": "after-dsh-9fbd4dca",
+      "effectCount": 1
+    },
+    {
+      "name": "collaboration recovery",
+      "passed": true,
+      "task": "collaboration-43daac37",
+      "effectCount": 1
+    },
+    {
+      "name": "question recovery",
+      "passed": true,
+      "task": "question-d6a84516",
+      "effectCount": 1
+    },
+    {
+      "name": "node-only recovery",
+      "passed": true,
+      "task": "node-only-f945aaaf",
+      "effectCount": 1
+    },
+    {
+      "name": "Durable cancellation",
+      "passed": true,
+      "task": "cancel-e39c452e"
+    },
+    {
+      "name": "real recovery",
+      "passed": true,
+      "task": "real-7d962b13",
+      "effectCount": 1
+    },
+    {
+      "name": "DBOS A2A DSH SSH full chain artifact checkpoint recovery",
+      "passed": true,
+      "task": "sandbox-39a28c8a",
+      "containerRecreated": false
+    },
+    {
+      "name": "Official A2A cold subscription",
+      "passed": true,
+      "task": "sse-63f08c2c",
+      "states": [
+        2,
+        3
+      ]
+    },
+    {
+      "name": "Durable admission before missing A2A projection",
+      "passed": true,
+      "task": "admission-12c431c3"
+    }
+  ],
+  "scope": "Isolated experiment, synthetic principal. Real model only in the explicit real scenario. No app account/database changes."
+}

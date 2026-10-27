@@ -15,7 +15,7 @@ from starlette.types import Receive, Scope, Send
 from .auth import Auth
 from .config import Settings
 from .projects import owned_project, workspace_path
-from .storage import Database, User
+from .storage import Artifact, Database, User
 
 MAX_FILE = 20 * 1024 * 1024
 
@@ -80,13 +80,27 @@ def router(settings: Settings, auth: Auth, db: Database) -> APIRouter:
     async def root(
         user: Annotated[User, Depends(auth.current_user)],
         project_id: uuid.UUID | None = None,
+        path: str = "",
     ):
+        if path.startswith("@artifacts/"):
+            parts = path.split("/")
+            if len(parts) != 3:
+                raise HTTPException(400, "Invalid artifact reference")
+            async with db.sessions() as session:
+                artifact = await session.get(Artifact, parts[1])
+                if (
+                    not artifact
+                    or artifact.owner_id != user.id
+                    or artifact.name != parts[2]
+                ):
+                    raise HTTPException(404, "Artifact not found")
+            return Path(artifact.path).parent
         if project_id:
             async with db.sessions() as session:
                 await owned_project(session, user.id, project_id)
-        path = workspace_path(settings, user.id, project_id)
-        path.mkdir(parents=True, exist_ok=True, mode=0o700)
-        return path
+        directory = workspace_path(settings, user.id, project_id)
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        return directory
 
     @api.get("/entries")
     def entries(
@@ -131,7 +145,10 @@ def router(settings: Settings, auth: Auth, db: Database) -> APIRouter:
         path: Annotated[str, Query(min_length=1, max_length=4096)],
     ):
         try:
-            fd = open_path(workspace, path)
+            fd = open_path(
+                workspace,
+                path.rsplit("/", 1)[-1] if path.startswith("@artifacts/") else path,
+            )
         except OSError:
             raise HTTPException(404, "Workspace file unavailable") from None
         info = os.fstat(fd)
