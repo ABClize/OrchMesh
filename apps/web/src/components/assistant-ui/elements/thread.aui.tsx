@@ -764,7 +764,7 @@ const AssistantMessage: FC = () => {
               case "indicator":
                 return (
                   <ThinkingLoader
-                    phases={["DSH 正在处理"]}
+                    phases={["正在处理"]}
                     phase={0}
                     size="sm"
                     variant="plain"

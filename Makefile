@@ -33,6 +33,8 @@ check:
 	node --check apps/runtime/export-history.mjs
 	node --check apps/runtime/observe-session.mjs
 	node --check apps/runtime/prompt-observation.mjs
+	node --check apps/runtime/skill-probe.mjs
+	node --check apps/runtime/skill-import.mjs
 	uv run --directory apps/server ruff check src tests
 	uv run --directory apps/server ruff format --check src tests
 	uv run --directory apps/server pyright src

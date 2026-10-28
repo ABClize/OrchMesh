@@ -94,6 +94,23 @@ class AgentVersion(Base):
     )
 
 
+class Skill(Base):
+    __tablename__ = "skill"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True)
+    description: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(Text)
+    revision: Mapped[str] = mapped_column(String(64))
+    enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class SkillRevision(Base):
+    __tablename__ = "skill_revision"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    definition: Mapped[dict] = mapped_column(JSON)
+    files: Mapped[dict] = mapped_column(JSON)
+
+
 class AgentComment(Base):
     __tablename__ = "agent_comment"
     id: Mapped[str] = mapped_column(

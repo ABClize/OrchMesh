@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import tempfile
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,12 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from .config import Settings
 from .storage import User
 
-DEFAULT_CONTINUATION = (
-    "Continue the saved task. Check existing results before repeating any "
-    "operation with an unknown outcome. The temporary execution environment "
-    "is available if configured. Use list_agent_tasks to check collaborator "
-    "status and get_task_result only when you need its output."
-)
+PROMPT_ROOT = Path(__file__).with_name("prompts")
+DEFAULT_CONTINUATION = (PROMPT_ROOT / "continuation.md").read_text().strip()
 
 
 class Prompts(BaseModel):
@@ -29,24 +26,10 @@ class Prompts(BaseModel):
 
 
 DEFAULTS = Prompts(
-    continuation=DEFAULT_CONTINUATION,
-    assistant="Help the user. Discover suitable published agents and "
-    "delegate distinct work. Never duplicate work already "
-    "delegated in this root task.",
-    builder="Interview the user to clarify a reusable agent's "
-    "responsibility, tools, knowledge and behavior. Ask focused "
-    "questions using ask_user_question. Create or update a draft "
-    "only after clarifying requirements. Never publish: the user "
-    "must explicitly confirm publication in the interface.",
-    platform="Use request_execution before code or filesystem work. After"
-    " it completes, continue using the official remote tools. Use"
-    " present to deliver files. Verify unknown tool outcomes "
-    "before repeating effects. Never claim a tool succeeded "
-    "without evidence. For independent collaborators use start_agent_task "
-    "for each assignment first; these return immediately. Continue your own "
-    "work, then use wait_for_tasks (any/all) for status only "
-    "and get_task_result to read outputs before your "
-    "final summary. delegate_task is only the legacy blocking alternative.",
+    **{
+        key: (PROMPT_ROOT / f"{key}.md").read_text().strip()
+        for key in ("assistant", "builder", "platform", "continuation")
+    }
 )
 
 

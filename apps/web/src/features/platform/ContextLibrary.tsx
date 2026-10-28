@@ -127,6 +127,36 @@ export function ContextLibrary() {
                   onSaved={() => query.invalidateQueries({ queryKey: [kind] })}
                 />
               </div>
+              {kind === "knowledge" && (
+                <Field>
+                  <FieldLabel htmlFor="knowledge-file">
+                    导入文件（.txt / .md）
+                  </FieldLabel>
+                  <Input
+                    id="knowledge-file"
+                    type="file"
+                    accept=".txt,.md,.markdown"
+                    disabled={busy}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      const input = event.target;
+                      void action(async () => {
+                        if (file.size > 128000)
+                          throw new Error("文本文件过大，请拆分后导入");
+                        const content = await file.text();
+                        if (content.length > 32000)
+                          throw new Error("文本超过 32000 字符，请拆分后导入");
+                        await platformRequest("/context/knowledge", "POST", {
+                          title: file.name,
+                          content,
+                        });
+                        input.value = "";
+                      });
+                    }}
+                  />
+                </Field>
+              )}
               {kind === "memory" && (
                 <label className="flex items-center justify-between gap-4 rounded-xl border p-4 text-sm">
                   <span>
@@ -218,36 +248,6 @@ export function ContextLibrary() {
                     </CardFooter>
                   </Card>
                 ))}
-              {kind === "knowledge" && (
-                <Field>
-                  <FieldLabel htmlFor="knowledge-file">
-                    导入文本或 Markdown（UTF-8，最多 32000 字符）
-                  </FieldLabel>
-                  <Input
-                    id="knowledge-file"
-                    type="file"
-                    accept=".txt,.md,.markdown"
-                    disabled={busy}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      const input = event.target;
-                      void action(async () => {
-                        if (file.size > 128000)
-                          throw new Error("文本文件过大，请拆分后导入");
-                        const content = await file.text();
-                        if (content.length > 32000)
-                          throw new Error("文本超过 32000 字符，请拆分后导入");
-                        await platformRequest("/context/knowledge", "POST", {
-                          title: file.name,
-                          content,
-                        });
-                        input.value = "";
-                      });
-                    }}
-                  />
-                </Field>
-              )}
               {!!rows?.length &&
                 !rows.some((row) =>
                   `${row.title} ${row.content}`

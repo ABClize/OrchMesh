@@ -220,7 +220,7 @@ export function Library({
             <DialogHeader>
               <DialogTitle>确认发布 {publishing?.name}</DialogTitle>
               <DialogDescription>
-                先完成草稿试运行，再确认发布。当前草稿将保存为不可变版本，供其他用户调用。
+                先试运行，确认结果符合预期后再发布。其他用户将能使用这个版本；之后编辑草稿不会改变已发布的内容。
               </DialogDescription>
             </DialogHeader>
             <p className="whitespace-pre-wrap break-words text-sm">

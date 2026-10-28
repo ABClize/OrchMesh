@@ -11,6 +11,7 @@ export type Agent = {
     instructions: string;
     tools?: string[];
     knowledge_ids?: string[];
+    skills?: { id: string; revision: string }[];
   };
 };
 export type ContextItem = {

@@ -30,6 +30,7 @@ from ..storage import (
     Preference,
     Task,
     TaskWait,
+    User,
     require_record,
 )
 from .sandbox import Sandboxes
@@ -403,6 +404,12 @@ class Engine:
                     "NO_PROXY": self.settings.no_proxy,
                 }
             )
+        from .skills import task_skills
+
+        async with self.db.sessions() as session:
+            skills = await task_skills(session, task.definition.get("skills", []), root)
+            owner = await session.get(User, task.owner_id)
+            skill_admin = bool(owner and owner.is_superuser)
         remote = None
         if task.sandbox:
             # Inputs are immutable, owner-authorized snapshots. Only task-local
@@ -457,7 +464,7 @@ class Engine:
                 else DEFAULTS.platform,
             }
         )
-        specs = definitions(conversation.creator)
+        specs = definitions(conversation.creator, skill_admin)
         if not memory_enabled:
             specs = [spec for spec in specs if spec["name"] != "remember_preference"]
         permissions = task.definition.get("tools", ["execution", "collaboration"])
@@ -480,6 +487,7 @@ class Engine:
         ]
         config = {
             "task": task_id,
+            "skills": skills,
             "root": str(root),
             "version": task.version_id,
             "promptParts": prompt_parts,

@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { ResourcePicker } from "./ResourcePicker";
+import { useSkills } from "@/features/skills/SkillLibrary";
 import { useQuery } from "@tanstack/react-query";
 import {
   NativeSelect,
@@ -16,6 +19,11 @@ export function AgentEditor({
   agent: Agent;
   onClose: () => void;
 }) {
+  const skills = useSkills();
+  const [bindings, setBindings] = useState(agent.draft.skills ?? []);
+  const [knowledgeIds, setKnowledgeIds] = useState(
+    agent.draft.knowledge_ids ?? [],
+  );
   const { action, busy, error } = useCatalogAction();
   const knowledge = useQuery({
     queryKey: ["knowledge"],
@@ -60,14 +68,8 @@ export function AgentEditor({
                 tools: ["collaboration", "execution", "web"].filter(
                   (name) => data.get(name) === "yes",
                 ),
-                knowledge_ids: [
-                  ...(agent.draft.knowledge_ids ?? []).filter(
-                    (id) => !knowledge.data?.some((row) => row.id === id),
-                  ),
-                  ...knowledge.data
-                    .filter((row) => data.get(`knowledge-${row.id}`) === "yes")
-                    .map((row) => row.id),
-                ],
+                skills: bindings,
+                knowledge_ids: knowledgeIds,
               });
               onClose();
             });
@@ -119,27 +121,67 @@ export function AgentEditor({
               </NativeSelect>
             </Field>
           ))}
-          {knowledge.data?.map((row) => (
-            <Field key={row.id}>
-              <FieldLabel htmlFor={`knowledge-${row.id}`}>
-                知识：{row.title}
-              </FieldLabel>
-              <NativeSelect
-                id={`knowledge-${row.id}`}
-                name={`knowledge-${row.id}`}
-                defaultValue={
-                  agent.draft.knowledge_ids?.includes(row.id) ? "yes" : "no"
-                }
-              >
-                <NativeSelectOption value="yes">
-                  包含在发布版本中
-                </NativeSelectOption>
-                <NativeSelectOption value="no">不使用</NativeSelectOption>
-              </NativeSelect>
-            </Field>
-          ))}
+          <ResourcePicker
+            title="知识"
+            items={(knowledge.data ?? []).map((k) => ({
+              id: k.id,
+              name: k.title || "未命名知识",
+            }))}
+            selected={knowledgeIds}
+            disabled={busy || !knowledge.data}
+            onAdd={(id) => setKnowledgeIds([...knowledgeIds, id])}
+            onRemove={(id) =>
+              setKnowledgeIds(knowledgeIds.filter((k) => k !== id))
+            }
+          />
+          {skills.error && (
+            <p role="alert">
+              {skills.error.message}
+              <Button type="button" onClick={() => void skills.refetch()}>
+                重新读取 Skills
+              </Button>
+            </p>
+          )}
+          <ResourcePicker
+            title="Skill"
+            items={(skills.data ?? []).map((s) => ({
+              ...s,
+              disabled: !s.enabled,
+            }))}
+            selected={bindings.map((b) => b.id)}
+            disabled={busy || !skills.data}
+            onAdd={(id) => {
+              const skill = skills.data?.find((s) => s.id === id);
+              if (skill)
+                setBindings([...bindings, { id, revision: skill.revision }]);
+            }}
+            onRemove={(id) => setBindings(bindings.filter((b) => b.id !== id))}
+            extra={(id) => {
+              const skill = skills.data?.find((s) => s.id === id);
+              const bound = bindings.find((b) => b.id === id);
+              return skill?.enabled && bound?.revision !== skill.revision ? (
+                <Button
+                  type="button"
+                  variant="link"
+                  disabled={busy}
+                  onClick={() =>
+                    setBindings(
+                      bindings.map((b) =>
+                        b.id === id ? { ...b, revision: skill.revision } : b,
+                      ),
+                    )
+                  }
+                >
+                  有新版 · 更新
+                </Button>
+              ) : null;
+            }}
+          />
           {error && <p role="alert">{error}</p>}
-          <Button type="submit" disabled={busy || !knowledge.data}>
+          <Button
+            type="submit"
+            disabled={busy || !knowledge.data || !skills.data}
+          >
             保存草稿
           </Button>
         </FieldGroup>

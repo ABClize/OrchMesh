@@ -36,6 +36,8 @@ class Sandboxes:
         # Container node UID is fixed by the official Node base image; app directories
         # outside this task are never mounted, even read-only.
         work.chmod(0o777)
+        skills = root / "skills"
+        skills.mkdir(exist_ok=True)
         keys = root / "ssh"
         keys.mkdir(exist_ok=True, mode=0o700)
         if not (keys / "identity").exists():
@@ -71,6 +73,8 @@ class Sandboxes:
                 "1g",
                 "--mount",
                 f"type=bind,src={work},dst=/workspace",
+                "--mount",
+                f"type=bind,src={skills},dst=/skills,readonly",
                 "--mount",
                 f"type=bind,src={modules},dst=/opt/orchmesh/node_modules,readonly",
                 "--mount",

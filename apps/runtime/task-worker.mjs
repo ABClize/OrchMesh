@@ -1,3 +1,6 @@
+import WorkingDirectory from "@deepseek-ai/dsh-working-directory";
+import Skills from "@deepseek-ai/dsh-skill";
+import * as ToolSkill from "@deepseek-ai/dsh-tool-skill";
 import { installPromptObservation } from "./prompt-observation.mjs";
 // Platform composition: the official DSH loop and persistence remain authoritative.
 import { installProxyFromEnvironment } from "@deepseek-ai/dsh-http-proxy";
@@ -88,6 +91,13 @@ try {
   });
   await ctx.plugin(Loop, { agents: [] });
   await ctx.plugin(Checkpoint);
+  await ctx.plugin(Skills);
+  for (const skill of config.skills ?? []) {
+    const {warnings, revision, metadata, ...definition} = skill;
+    ctx.skills.register({...definition, source: "orchmesh-bound"});
+  }
+  await ctx.plugin(WorkingDirectory, { defaultDirectory: "/workspace" });
+  await ctx.plugin(ToolSkill);
   await ctx.plugin(Retry);
   await ctx.plugin(UserQuestionService);
   await ctx.plugin(Ask, { mode: "timed", timeout: 1 });

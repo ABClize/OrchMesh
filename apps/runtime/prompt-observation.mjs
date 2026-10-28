@@ -21,7 +21,10 @@ export function installPromptObservation(ctx, config) {
   });
   ctx.on("llm/stream", async function* (options, next) {
     if (options.sessionId === config.task && !options.purpose) {
+      const skillCalls = new Set(options.messages.flatMap(m => m.content ?? []).filter(c => c.type === "tool-call" && c.name === "skill").map(c => c.id));
       const snapshot = {
+        bound_skills: (config.skills ?? []).map(({name,revision,description,invocation}) => ({name,revision,description,invocation})),
+        skill_messages: options.messages.filter(m => ["skill-catalog", "skill-invocation"].includes(m.source?.kind) || (m.role === "tool" && skillCalls.has(m.toolCallId))),
         captured_at: new Date().toISOString(),
         session_id: options.sessionId,
         model: options.model,

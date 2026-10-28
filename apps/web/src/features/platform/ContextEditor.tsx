@@ -56,7 +56,7 @@ export function ContextEditor({
               {kind === "memory" ? "记忆" : "知识"}
             </DialogTitle>
             <DialogDescription>
-              修改影响后续任务，已发布智能体的知识快照保持不变。
+              修改会用于之后的任务。已发布的智能体仍使用发布时的内容。
             </DialogDescription>
           </DialogHeader>
           {error && <p role="alert">{error}</p>}

@@ -180,7 +180,7 @@ export function CallInspector({
             <dl className="mt-2 flex flex-col gap-1 break-all">
               <dt>调用 ID</dt>
               <dd>{task.id}</dd>
-              <dt>绑定版本</dt>
+              <dt>使用的智能体版本</dt>
               <dd>{task.version_id ?? "未提供"}</dd>
             </dl>
           </details>

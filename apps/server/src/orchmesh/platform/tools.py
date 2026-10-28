@@ -7,7 +7,7 @@ from sqlalchemy import select
 from ..storage import AgentDefinition, Memory, Preference, Task, ToolReceipt
 
 
-def definitions(creator: bool) -> list[dict]:
+def definitions(creator: bool, skill_admin: bool = False) -> list[dict]:
     tools = [
         {
             "name": "search_knowledge",
@@ -114,6 +114,61 @@ def definitions(creator: bool) -> list[dict]:
         },
     ]
     if creator:
+        tools.extend(
+            [
+                {
+                    "name": "inspect_skill",
+                    "description": "Read Skill instructions and resource names.",
+                    "parameters": {"id": {"type": "string", "required": True}},
+                },
+                {
+                    "name": "list_agent_drafts",
+                    "description": "Read your agent drafts before editing.",
+                    "parameters": {},
+                },
+            ]
+        )
+        tools.append(
+            {
+                "name": "list_skills",
+                "description": (
+                    "List public Skills with binding IDs and revisions. "
+                    "This is configuration, not execution."
+                ),
+                "parameters": {},
+            }
+        )
+        if skill_admin:
+            tools.append(
+                {
+                    "name": "import_skill",
+                    "description": (
+                        "Import a user-requested Skill. Administrator only. "
+                        "Does not bind or publish an agent."
+                    ),
+                    "parameters": {
+                        "source": {"type": "string", "required": True},
+                        "name": {"type": "string", "required": True},
+                        "replace_id": {"type": "string"},
+                        "revision": {"type": "string"},
+                    },
+                }
+            )
+            tools.append(
+                {
+                    "name": "edit_skill_file",
+                    "description": (
+                        "Edit a public Skill text resource with revision check. "
+                        "Administrator only."
+                    ),
+                    "parameters": {
+                        "id": {"type": "string", "required": True},
+                        "revision": {"type": "string", "required": True},
+                        "path": {"type": "string", "required": True},
+                        "content": {"type": "string", "required": True},
+                    },
+                }
+            )
         tools.append(
             {
                 "name": "save_agent_draft",
@@ -129,6 +184,17 @@ def definitions(creator: bool) -> list[dict]:
                             "Allowed capabilities: collaboration, execution, web; "
                             "use [] for none."
                         ),
+                    },
+                    "skills": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "id": {"type": "string", "required": True},
+                                "revision": {"type": "string", "required": True},
+                            },
+                        },
                     },
                     "knowledge_ids": {"type": "array", "items": {"type": "string"}},
                     "id": {
@@ -151,6 +217,16 @@ async def invoke(engine, task: Task, name: str, args: dict, call_id: str):
         if receipt:
             return receipt.result
     if name in (
+        "list_skills",
+        "import_skill",
+        "edit_skill_file",
+        "inspect_skill",
+        "list_agent_drafts",
+    ):
+        from .skill_tools import manage
+
+        result = await manage(engine, task, name, args, key)
+    elif name in (
         "delegate_task",
         "start_agent_task",
         "wait_for_tasks",
@@ -261,8 +337,12 @@ async def invoke(engine, task: Task, name: str, args: dict, call_id: str):
                         **definition,
                         "tools": args.get("tools", []),
                         "knowledge_ids": args.get("knowledge_ids", []),
+                        "skills": args.get("skills", []),
                     }
                 ).model_dump()
+                from .skills import freeze_skills
+
+                await freeze_skills(session, definition["skills"])
                 if agent is None:
                     agent = AgentDefinition(
                         id=identifier, owner_id=task.owner_id, name=args["name"]

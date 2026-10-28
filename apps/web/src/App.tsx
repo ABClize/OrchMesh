@@ -1,3 +1,4 @@
+import { SkillLibrary } from "@/features/skills/SkillLibrary";
 import { PromptSettings } from "@/features/settings/PromptSettings";
 import { ModelSettings } from "@/features/models/ModelSettings";
 import { ThemeToggle } from "@/features/workspace/ThemeToggle";
@@ -70,10 +71,10 @@ function Workspace() {
   const query = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState<
-    "chat" | "agents" | "context" | "models" | "prompts"
+    "chat" | "agents" | "context" | "models" | "prompts" | "skills"
   >("chat");
   function navigate(
-    value: "chat" | "agents" | "context" | "models" | "prompts",
+    value: "chat" | "agents" | "context" | "models" | "prompts" | "skills",
   ) {
     setPage(value);
     setShowConversations(false);
@@ -287,6 +288,14 @@ function Workspace() {
                 智能体库
               </Button>
               <Button
+                variant={page === "skills" ? "secondary" : "ghost"}
+                className="justify-start"
+                onClick={() => navigate("skills")}
+              >
+                <BookOpen />
+                Skill 库
+              </Button>
+              <Button
                 variant={page === "context" ? "secondary" : "ghost"}
                 className="justify-start"
                 onClick={() => navigate("context")}
@@ -401,18 +410,20 @@ function Workspace() {
                 <PanelLeft />
               </Button>
               <span className="min-w-0 flex-1 truncate">
-                {page === "prompts"
-                  ? "提示词设置"
-                  : page === "models"
-                    ? "模型设置"
-                    : page === "agents"
-                      ? "智能体库"
-                      : page === "context"
-                        ? "知识与记忆"
-                        : id
-                          ? (conversations.data?.find((c) => c.id === id)
-                              ?.title ?? "新对话")
-                          : "工作空间"}
+                {page === "skills"
+                  ? "Skill 库"
+                  : page === "prompts"
+                    ? "提示词设置"
+                    : page === "models"
+                      ? "模型设置"
+                      : page === "agents"
+                        ? "智能体库"
+                        : page === "context"
+                          ? "知识与记忆"
+                          : id
+                            ? (conversations.data?.find((c) => c.id === id)
+                                ?.title ?? "新对话")
+                            : "工作空间"}
               </span>
               {page === "chat" && (
                 <Button
@@ -456,6 +467,7 @@ function Workspace() {
                 }}
               />
             )}
+            {page === "skills" && <SkillLibrary />}
             {page === "context" && <ContextLibrary />}
             {page === "models" && me.data?.is_superuser && <ModelSettings />}
             {page === "prompts" && me.data?.is_superuser && <PromptSettings />}

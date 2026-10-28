@@ -12,12 +12,48 @@ type Snapshot = {
   continuation_configured: string;
   tools: { name: string; source: string; description?: string }[];
   tool_history: unknown;
+  bound_skills?: unknown[];
+  skill_messages?: unknown[];
 };
 function JsonContent({ value }: { value: unknown }) {
   return (
     <pre className="max-h-96 overflow-auto rounded-lg bg-muted/40 p-3 text-xs whitespace-pre-wrap break-words">
       {JSON.stringify(value, null, 2)}
     </pre>
+  );
+}
+function readable(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(readable);
+  if (!value || typeof value !== "object") return [];
+  const item = value as Record<string, unknown>;
+  if (typeof item.text === "string") return [item.text];
+  if (item.content) return readable(item.content);
+  return [];
+}
+function ReadableContent({ value }: { value: unknown }) {
+  const text = readable(value).join("\n\n");
+  return (
+    <div className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-sm leading-6">
+      {text || "没有可显示的文本。原始记录可在调试信息中查看。"}
+    </div>
+  );
+}
+function sectionTitle(name: string) {
+  const titles: Record<string, string> = {
+    "orchmesh-definition": "智能体职责",
+    "orchmesh-task_prompt": "本次任务",
+    "orchmesh-conversation_history": "对话历史",
+    "orchmesh-user_memory": "个人记忆",
+    "orchmesh-collaboration": "协作信息",
+    "orchmesh-platform": "公共规则",
+    "harness:identity": "基础身份",
+    "deployment:persona-prefix": "基础行为规则",
+    "deployment:persona-suffix": "补充行为规则",
+  };
+  return (
+    titles[name] ??
+    (name.startsWith("tool:") ? "工具说明 · " + name.slice(5) : "运行指令")
   );
 }
 export function EffectivePrompt({ taskId }: { taskId: string }) {
@@ -36,8 +72,7 @@ export function EffectivePrompt({ taskId }: { taskId: string }) {
     <section aria-label="最终提示词" className="flex min-w-0 flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          只读 · 最近一次 DSH
-          模型请求边界记录。不是当前设置的预览，也不是供应商内部提示词。
+          这里显示这次任务实际发送给模型的指令，供核对和排查问题。只能查看，修改请前往「提示词设置」。
         </p>
         <Button
           variant="outline"
@@ -56,7 +91,7 @@ export function EffectivePrompt({ taskId }: { taskId: string }) {
       )}
       {query.data && !query.data.available && (
         <p role="status">
-          暂无实际请求记录。任务尚未请求模型，或来自启用此功能之前；不会用当前设置补造历史。
+          暂无记录。任务开始调用模型后，这里会显示实际使用的指令；较早的任务可能没有记录。
         </p>
       )}
       {snapshot && (
@@ -73,9 +108,12 @@ export function EffectivePrompt({ taskId }: { taskId: string }) {
               {snapshot.sections.map((part) => (
                 <details key={part.name} className="rounded-lg border p-3">
                   <summary className="cursor-pointer text-sm">
-                    {part.name} · {part.source}
+                    {sectionTitle(part.name)}
                   </summary>
-                  <pre className="mt-3 max-h-80 overflow-auto text-xs whitespace-pre-wrap break-words">
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    来源：{part.source}
+                  </p>
+                  <pre className="mt-3 max-h-80 overflow-auto text-sm whitespace-pre-wrap break-words">
                     {part.text}
                   </pre>
                 </details>
@@ -86,13 +124,11 @@ export function EffectivePrompt({ taskId }: { taskId: string }) {
             <summary className="cursor-pointer">
               实际系统消息 · 完整内容
             </summary>
-            <JsonContent value={snapshot.system_messages} />
+            <ReadableContent value={snapshot.system_messages} />
           </details>
           <details>
-            <summary className="cursor-pointer">
-              DSH 动态上下文 · 最近生效消息
-            </summary>
-            <JsonContent value={snapshot.runtime_context} />
+            <summary className="cursor-pointer">本次执行参考的信息</summary>
+            <ReadableContent value={snapshot.runtime_context} />
           </details>
           <details>
             <summary className="cursor-pointer">
@@ -102,7 +138,7 @@ export function EffectivePrompt({ taskId }: { taskId: string }) {
                 : "此请求历史中未发送"}
             </summary>
             <p className="my-2 text-xs text-muted-foreground">
-              配置快照（仅恢复执行时使用）：
+              任务中断后继续执行时使用的指令：
             </p>
             <pre className="whitespace-pre-wrap break-words text-xs">
               {snapshot.continuation_configured}
@@ -110,7 +146,7 @@ export function EffectivePrompt({ taskId }: { taskId: string }) {
             <p className="my-2 text-xs text-muted-foreground">
               请求历史中的实际恢复消息：
             </p>
-            <JsonContent value={snapshot.continuation_messages} />
+            <ReadableContent value={snapshot.continuation_messages} />
           </details>
           <details>
             <summary className="cursor-pointer">
@@ -121,13 +157,23 @@ export function EffectivePrompt({ taskId }: { taskId: string }) {
                 <summary className="cursor-pointer text-sm">
                   {tool.name} · {tool.source}
                 </summary>
-                <JsonContent value={tool} />
+                <p className="mt-2 text-sm">
+                  {tool.description || "无补充说明"}
+                </p>
               </details>
             ))}
           </details>
           <details>
-            <summary className="cursor-pointer">DSH 工具历史元数据</summary>
-            <JsonContent value={snapshot.tool_history} />
+            <summary className="cursor-pointer">
+              本次使用的 Skills 与读取内容（{snapshot.bound_skills?.length ?? 0}
+              ）
+            </summary>
+
+            <ReadableContent value={snapshot.skill_messages ?? []} />
+          </details>
+          <details>
+            <summary className="cursor-pointer">调试信息 · 原始记录</summary>
+            <JsonContent value={snapshot} />
           </details>
         </>
       )}

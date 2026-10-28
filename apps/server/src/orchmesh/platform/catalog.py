@@ -19,6 +19,11 @@ from ..storage import (
 )
 
 
+class SkillBinding(BaseModel):
+    id: str
+    revision: str
+
+
 class Definition(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=120)
@@ -28,6 +33,7 @@ class Definition(BaseModel):
         default_factory=lambda: ["collaboration", "execution"]
     )
     knowledge_ids: list[str] = Field(default_factory=list)
+    skills: list[SkillBinding] = Field(default_factory=list, max_length=50)
 
 
 class MemorySettings(BaseModel):
@@ -52,6 +58,12 @@ class ContextBody(BaseModel):
 async def freeze_definition(session, agent):
     definition = Definition.model_validate(agent.draft)
     frozen = definition.model_dump()
+    from .skills import freeze_skills
+
+    try:
+        frozen["skills"] = await freeze_skills(session, frozen["skills"])
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from None
     frozen["knowledge"] = []
     for identifier in definition.knowledge_ids:
         item = await session.get(Knowledge, identifier)
@@ -109,6 +121,12 @@ def router(auth, db):
         body: Definition, user: Annotated[User, Depends(auth.current_user)]
     ) -> dict:
         async with db.sessions.begin() as session:
+            from .skills import freeze_skills
+
+            try:
+                await freeze_skills(session, [b.model_dump() for b in body.skills])
+            except ValueError as e:
+                raise HTTPException(422, str(e)) from None
             agent = AgentDefinition(
                 owner_id=user.id,
                 name=body.name,
@@ -126,6 +144,12 @@ def router(auth, db):
     ) -> dict:
         async with db.sessions.begin() as session:
             agent = await editable(session, agent_id, user)
+            from .skills import freeze_skills
+
+            try:
+                await freeze_skills(session, [b.model_dump() for b in body.skills])
+            except ValueError as e:
+                raise HTTPException(422, str(e)) from None
             agent.name, agent.description, agent.draft = (
                 body.name,
                 body.description,
@@ -153,7 +177,11 @@ def router(auth, db):
                     )
                 )
             ).all()
-            if not any(trial.definition == frozen for trial in trials):
+            if not any(
+                {**trial.definition, "skills": trial.definition.get("skills", [])}
+                == frozen
+                for trial in trials
+            ):
                 raise HTTPException(
                     409, "Complete a trial of this draft before publishing"
                 )

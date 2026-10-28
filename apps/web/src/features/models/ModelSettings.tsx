@@ -6,7 +6,6 @@ import {
   Card,
   CardHeader,
   CardTitle,
-  CardDescription,
   CardContent,
   CardFooter,
 } from "@/components/ui/card";
@@ -22,7 +21,7 @@ function describeEfforts(profile: Profile) {
     : Object.keys(profile.reasoning_efforts ?? {});
   return levels.length
     ? levels.map((level) => effortNames[level] ?? level).join(" / ")
-    : "DSH 默认能力";
+    : "自动识别思考强度";
 }
 export function ModelSettings() {
   const query = useQueryClient();
@@ -100,19 +99,13 @@ export function ModelSettings() {
                   </span>
                 )}
               </CardTitle>
-              <CardDescription>
-                {model.id} · {model.api}
-              </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="truncate text-sm text-muted-foreground">
-                {model.base_url}
-              </p>
               <p className="mt-2 text-sm">思考：{describeEfforts(model)}</p>
             </CardContent>
             <CardFooter className="justify-between">
               <span className="text-xs text-muted-foreground">
-                {model.has_key ? "密钥已保存" : "未配置密钥"}
+                {model.has_key ? "已配置 · 可测试连接" : "待配置密钥"}
               </span>
               <Button
                 variant="outline"

@@ -28,7 +28,7 @@ export function ExecutionHistory({
       <p className="p-4 text-sm text-muted-foreground">
         {available === false
           ? "执行记录尚未可用。"
-          : "暂无已持久保存的执行记录。实时输出可能先于记录出现。"}
+          : "执行记录还未保存，请稍后刷新。你可以先查看实时输出。"}
       </p>
     );
   return (

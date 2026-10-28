@@ -1,3 +1,7 @@
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RotateCcw, Save } from "lucide-react";
@@ -19,7 +23,7 @@ const fields = [
   {
     key: "continuation",
     name: "任务恢复提示",
-    description: "已有会话继续执行时作为恢复消息使用；普通首轮不会发送。",
+    description: "任务中断后继续执行时，提醒智能体检查已有进度、接着完成工作。",
   },
   {
     key: "assistant",
@@ -40,6 +44,7 @@ const fields = [
 ] as const;
 function PromptForm({ catalog }: { catalog: Catalog }) {
   const query = useQueryClient();
+  const [selected, setSelected] = useState<string>("assistant");
   const [values, setValues] = useState(catalog.prompts);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -78,55 +83,72 @@ function PromptForm({ catalog }: { catalog: Catalog }) {
           {notice}
         </p>
       )}
-      {fields.map(({ key, name, description }) => (
-        <Card key={key}>
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div className="min-w-0">
-              <CardTitle>
-                <label htmlFor={`prompt-${key}`}>{name}</label>
-              </CardTitle>
-              <CardDescription id={`prompt-help-${key}`} className="mt-2">
-                {description}
-              </CardDescription>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy || values[key] === catalog.defaults[key]}
-              aria-label={`恢复${name}默认提示词`}
-              onClick={() => {
-                setValues({ ...values, [key]: catalog.defaults[key] });
-                setNotice("已填入默认提示词，点击保存后生效。");
-              }}
-            >
-              <RotateCcw data-icon="inline-start" />
-              恢复默认
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              id={`prompt-${key}`}
-              aria-describedby={`prompt-help-${key}`}
-              value={values[key]}
-              onChange={(e) => {
-                setValues({ ...values, [key]: e.target.value });
-                setNotice("");
-              }}
-              disabled={busy}
-              required
-              maxLength={32000}
-              className="min-h-36 resize-y font-mono text-sm leading-6"
-            />
-            <p className="mt-2 text-right text-xs text-muted-foreground">
-              {values[key].length} / 32000
-            </p>
-          </CardContent>
-        </Card>
-      ))}
+      <label className="flex flex-col gap-2 text-sm">
+        编辑对象
+        <NativeSelect
+          aria-label="编辑对象"
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+        >
+          {fields.map((f) => (
+            <NativeSelectOption key={f.key} value={f.key}>
+              {f.name}
+              {values[f.key] !== catalog.prompts[f.key] ? " · 未保存" : ""}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </label>
+      {fields
+        .filter(({ key }) => key === selected)
+        .map(({ key, name, description }) => (
+          <Card key={key}>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div className="min-w-0">
+                <CardTitle>
+                  <label htmlFor={`prompt-${key}`}>{name}</label>
+                </CardTitle>
+                <CardDescription id={`prompt-help-${key}`} className="mt-2">
+                  {description}
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy || values[key] === catalog.defaults[key]}
+                aria-label={`恢复${name}默认提示词`}
+                onClick={() => {
+                  setValues({ ...values, [key]: catalog.defaults[key] });
+                  setNotice("已填入默认提示词，点击保存后生效。");
+                }}
+              >
+                <RotateCcw data-icon="inline-start" />
+                恢复默认
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                id={`prompt-${key}`}
+                aria-describedby={`prompt-help-${key}`}
+                value={values[key]}
+                onChange={(e) => {
+                  setValues({ ...values, [key]: e.target.value });
+                  setNotice("");
+                }}
+                disabled={busy}
+                required
+                maxLength={32000}
+                className="min-h-36 resize-y font-mono text-sm leading-6"
+              />
+              <p className="mt-2 text-right text-xs text-muted-foreground">
+                {values[key].length} / 32000
+              </p>
+            </CardContent>
+          </Card>
+        ))}
       <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t bg-background py-3">
         <span className="text-sm text-muted-foreground">
-          {dirty ? "有未保存的修改" : "与已保存设置一致"}
+          {dirty ? "有未保存的修改，保存后将替换原设置" : "已保存"}
         </span>
         <div className="flex gap-2">
           <Button
@@ -168,7 +190,7 @@ export function PromptSettings() {
         <header>
           <h1 className="text-xl font-medium">提示词设置</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            管理内置智能体和平台公共指令。恢复默认后需保存，不保留设置版本记录。
+            设置智能体的工作方式和回答要求。
           </p>
         </header>
         {catalog.isPending && <Skeleton className="h-60" />}

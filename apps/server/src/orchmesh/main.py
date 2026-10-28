@@ -130,6 +130,9 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
     app.state.db, app.state.manager, app.state.auth = db, manager, auth
     app.include_router(model_settings_router(settings, auth, db))
     app.include_router(prompt_settings_router(settings, auth))
+    from .platform.skills import router as skills_router
+
+    app.include_router(skills_router(settings, auth, db))
     app.include_router(auth.router)
     app.include_router(workspace_router(settings, auth, db))
     app.include_router(catalog_router(auth, db))

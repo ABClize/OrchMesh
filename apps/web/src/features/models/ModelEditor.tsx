@@ -97,7 +97,7 @@ export function ModelEditor({
         <DialogHeader>
           <DialogTitle>{creating ? "添加模型" : "编辑模型"}</DialogTitle>
           <DialogDescription>
-            能力由 DSH 解析。测试连接会发送一条简短请求，不访问对话历史。
+            填写模型服务的连接信息。测试连接只发送一条测试消息，不包含你的对话。
           </DialogDescription>
         </DialogHeader>
         <form
@@ -178,7 +178,7 @@ export function ModelEditor({
                 </NativeSelect>
               </Field>
               <Field>
-                <FieldLabel htmlFor="model-provider">DSH 能力目录</FieldLabel>
+                <FieldLabel htmlFor="model-provider">模型所属厂商</FieldLabel>
                 <NativeSelect
                   id="model-provider"
                   value={form.provider}
@@ -193,18 +193,18 @@ export function ModelEditor({
                   )}
                 </NativeSelect>
                 <FieldDescription>
-                  选择模型所属供应商以复用 DSH
-                  内置思考能力；兼容网关仍使用上面的 API 地址。
+                  用于自动识别模型支持的思考强度。实际连接地址仍使用上面填写的
+                  API 地址。
                 </FieldDescription>
               </Field>
               <details>
                 <summary className="cursor-pointer text-sm text-muted-foreground">
-                  高级：覆盖思考能力
+                  高级设置：手动配置思考强度
                 </summary>
                 <FieldGroup className="mt-4">
                   <Field>
                     <FieldLabel htmlFor="model-efforts">
-                      能力映射（可选）
+                      思考强度参数（JSON，可选）
                     </FieldLabel>
                     <Textarea
                       id="model-efforts"
@@ -214,11 +214,11 @@ export function ModelEditor({
                         setResult(null);
                       }}
                       placeholder={
-                        '留空使用 DSH 目录；{} 禁用；例如 {"off":null,"high":"high"}'
+                        '留空自动识别；{} 关闭思考；例如 {"off":null,"high":"high"}'
                       }
                     />
                     <FieldDescription>
-                      仅当网关能力与 DSH 目录不同时覆盖。
+                      通常无需填写。仅当服务商要求的参数与自动识别结果不同时修改。
                     </FieldDescription>
                   </Field>
                   <Field>
@@ -236,7 +236,7 @@ export function ModelEditor({
                       }
                     >
                       <NativeSelectOption value="auto">
-                        DSH 自动
+                        自动识别
                       </NativeSelectOption>
                       <NativeSelectOption value="deepseek">
                         DeepSeek
@@ -277,14 +277,6 @@ export function ModelEditor({
             </Alert>
           )}
           <div className="mt-6 flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => action.mutate("capabilities")}
-            >
-              读取能力
-            </Button>
             <Button
               type="button"
               variant="outline"

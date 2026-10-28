@@ -3,7 +3,6 @@ import { SshConnection } from "@deepseek-ai/dsh-ssh";
 import { SshFileSystem } from "@deepseek-ai/dsh-fs-ssh";
 import { SshSubprocessRuntime } from "@deepseek-ai/dsh-subprocess-ssh";
 import { SshSandboxProvider } from "@deepseek-ai/dsh-sandbox-ssh";
-import WorkingDirectory from "@deepseek-ai/dsh-working-directory";
 import Bash from "@deepseek-ai/dsh-bash-sandbox";
 import { ShellEnvRegistry } from "@deepseek-ai/dsh-shell-env";
 import * as ToolBash from "@deepseek-ai/dsh-tool-bash";
@@ -29,7 +28,6 @@ export async function mountRemote(ctx, remote) {
     SshSandboxProvider,
   ])
     await ctx.plugin(plugin);
-  await ctx.plugin(WorkingDirectory, { defaultDirectory: "/workspace" });
   await ctx.plugin(Bash, { cwd: "/workspace" });
   await ctx.plugin(ShellEnvRegistry);
   for (const plugin of [ToolBash, ToolFs, Present]) await ctx.plugin(plugin);
