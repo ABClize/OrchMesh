@@ -54,11 +54,9 @@ export function collaborationSpans(
         for (const record of records.filter(
           (span) => span.kind === "tool" || span.name.includes("重试"),
         )) {
-          const waiting = [
-            "wait_for_tasks",
-            "delegate_task",
-            "user_question",
-          ].includes(record.name);
+          const waiting = ["wait_for_tasks", "user_question"].includes(
+            record.name,
+          );
           const open = active && record.state === "open";
           spans.push({
             ...record,

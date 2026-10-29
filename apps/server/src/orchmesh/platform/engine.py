@@ -476,7 +476,6 @@ class Engine:
                 and "execution" not in permissions
                 or spec["name"]
                 in (
-                    "delegate_task",
                     "start_agent_task",
                     "wait_for_tasks",
                     "get_task_result",

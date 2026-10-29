@@ -115,7 +115,6 @@ export function spanTaskIds(span: ExecutionSpan): string[] {
     ![
       "start_agent_task",
       "wait_for_tasks",
-      "delegate_task",
       "get_task_result",
       "list_agent_tasks",
     ].includes(span.name)

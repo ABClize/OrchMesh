@@ -12,7 +12,7 @@ from test_models import profiles
 from orchmesh.platform.catalog import freeze_definition
 from orchmesh.platform.skills import task_skills
 from orchmesh.platform.tools import definitions, invoke
-from orchmesh.storage import AgentDefinition, Task
+from orchmesh.storage import AgentDefinition, AgentVersion, Task
 
 
 def bundle(body="Return SKILL_V1.", name="business-proof"):
@@ -71,6 +71,16 @@ async def test_skill_permissions_binding_and_immutable_tasks(app, tmp_path):
         )
         assert changed.status_code == 200, changed.text
         assert changed.json()["revision"] != skill["revision"]
+        old = (
+            await client.get(f"/api/skills/{skill['id']}?revision={skill['revision']}")
+        ).json()
+        assert old["revision"] == skill["revision"]
+        assert old["definition"]["content"] == "Return SKILL_V1."
+        assert old["used_by"] == [{"id": agent["id"], "name": "Proof"}]
+        assert (
+            await client.get(f"/api/skills/{skill['id']}?revision=missing")
+        ).status_code == 404
+        assert (await other.get(f"/api/skills/{skill['id']}")).json()["used_by"] == []
         stale = await client.put(
             "/api/skills/" + skill["id"] + "/file",
             json={
@@ -91,6 +101,26 @@ async def test_skill_permissions_binding_and_immutable_tasks(app, tmp_path):
             assert (await freeze_definition(s, record))["skills"][0][
                 "revision"
             ] == skill["revision"]
+        async with app.state.db.sessions.begin() as s:
+            record = await s.get(AgentDefinition, agent["id"])
+            published = AgentVersion(
+                id="skill-preview-published",
+                agent_id=agent["id"],
+                definition=await freeze_definition(s, record),
+            )
+            s.add(published)
+            record.published_version = published.id
+        updated_definition = {
+            **definition,
+            "skills": [{"id": skill["id"], "revision": changed.json()["revision"]}],
+        }
+        saved = await client.put("/api/agents/" + agent["id"], json=updated_definition)
+        assert saved.status_code == 200, saved.text
+        async with app.state.db.sessions() as s:
+            record = await s.get(AgentDefinition, agent["id"])
+            published = await s.get(AgentVersion, record.published_version)
+            assert record.draft["skills"][0]["revision"] == changed.json()["revision"]
+            assert published.definition["skills"][0]["revision"] == skill["revision"]
         assert not {"list_skills", "import_skill", "edit_skill_file"} & {
             t["name"] for t in definitions(False, True)
         }

@@ -75,8 +75,8 @@ async def main():
         cid, root = await admit(
             None,
             (
-                f"用 delegate_task 调用智能体 {aid}，work_key 必须为 restart-child，"
-                f"任务逐字传入：{childprompt}。等它完成再回复 A2A_RESTART_OK。"
+                f"用 start_agent_task 发起智能体任务，智能体 ID 为 {aid}，work_key 必须为 restart-child，"
+                f"任务逐字传入：{childprompt}。用 wait_for_tasks 等待完成，再用 get_task_result 读取并核实成果，最后回复 A2A_RESTART_OK。"
                 "你自己不执行命令。"
             ),
             "迁移验收：A2A父子任务重启恢复",

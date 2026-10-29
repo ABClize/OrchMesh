@@ -33,3 +33,13 @@ export function ThemeToggle() {
     </Button>
   );
 }
+
+export function initializeTheme() {
+  try {
+    const dark = localStorage.getItem("orchmesh-theme") === "dark";
+    document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  } catch {
+    /* Use the default theme if storage is unavailable. */
+  }
+}

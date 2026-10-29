@@ -91,27 +91,6 @@ def definitions(creator: bool, skill_admin: bool = False) -> list[dict]:
             ),
             "parameters": {"task_id": {"type": "string", "required": True}},
         },
-        {
-            "name": "delegate_task",
-            "description": (
-                "Legacy synchronous delegation, retained for saved sessions. "
-                "Prefer start_agent_task then wait_for_tasks for new work. "
-                "This waits for the result. Do not delegate the same work "
-                "twice or wait on an ancestor."
-            ),
-            "parameters": {
-                "agent_id": {"type": "string", "required": True},
-                "task": {"type": "string", "required": True},
-                "work_key": {
-                    "type": "string",
-                    "required": True,
-                    "description": (
-                        "Stable semantic identifier for this unit of work, reused for"
-                        " duplicates within the root task."
-                    ),
-                },
-            },
-        },
     ]
     if creator:
         tools.extend(
@@ -211,6 +190,8 @@ def definitions(creator: bool, skill_admin: bool = False) -> list[dict]:
 
 
 async def invoke(engine, task: Task, name: str, args: dict, call_id: str):
+    if name not in {tool["name"] for tool in definitions(True, True)}:
+        raise ValueError("Unknown platform tool")
     key = f"{task.id}:{call_id}"
     async with engine.db.sessions() as session:
         receipt = await session.get(ToolReceipt, key)
@@ -227,7 +208,6 @@ async def invoke(engine, task: Task, name: str, args: dict, call_id: str):
 
         result = await manage(engine, task, name, args, key)
     elif name in (
-        "delegate_task",
         "start_agent_task",
         "wait_for_tasks",
         "get_task_result",
@@ -245,8 +225,6 @@ async def invoke(engine, task: Task, name: str, args: dict, call_id: str):
             result = await engine.protocol.read_result(task, args["task_id"])
         elif name == "list_agent_tasks":
             result = {"tasks": await engine.protocol.statuses(task)}
-        else:
-            result = await engine.protocol.delegate(task, args)
     else:
         async with engine.db.sessions.begin() as session:
             if name == "search_knowledge":

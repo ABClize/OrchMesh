@@ -250,19 +250,24 @@ def router(settings, auth, db):
             return [export(row) for row in rows]
 
     @api.get("/{identifier}")
-    async def detail(identifier: str, user=Depends(auth.current_user)) -> dict:
+    async def detail(
+        identifier: str, revision: str | None = None, user=Depends(auth.current_user)
+    ) -> dict:
         async with db.sessions() as session:
             item = await session.get(Skill, identifier)
             if not item or (not item.enabled and not user.is_superuser):
                 raise HTTPException(404, "Skill 不存在")
-            rev = await session.get(SkillRevision, item.revision)
+            rev = await session.get(SkillRevision, revision or item.revision)
+            if not rev or rev.definition["name"] != item.name:
+                raise HTTPException(404, "Skill 版本不存在")
             agents = (await session.scalars(select(AgentDefinition))).all()
             return {
                 **export(item),
                 "definition": rev.definition,
+                "revision": rev.id,
                 "files": rev.files,
                 "used_by": [
-                    a.name
+                    {"id": a.id, "name": a.name}
                     for a in agents
                     if any(b["id"] == identifier for b in a.draft.get("skills", []))
                     and (a.owner_id == user.id or user.is_superuser)

@@ -10,7 +10,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, true
 
 from ..auth import bearer
 from ..storage import Artifact, Conversation, Task, TaskWait, User
@@ -187,7 +187,10 @@ class Observation:
     async def owned_task(self, task_id: str, user: User) -> Task:
         async with self.manager.db.sessions() as session:
             task = await session.scalar(
-                select(Task).where(Task.id == task_id, Task.owner_id == user.id)
+                select(Task).where(
+                    Task.id == task_id,
+                    true() if user.is_superuser else Task.owner_id == user.id,
+                )
             )
             if task is None:
                 raise HTTPException(404, "Task not found")
@@ -227,14 +230,23 @@ class Observation:
     async def graph(self, conversation_id: str, user: User, root_id: str | None):
         async with self.manager.db.sessions() as session:
             owned = await session.scalar(
-                select(Conversation.id).where(
-                    Conversation.id == conversation_id, Conversation.user_id == user.id
+                select(Conversation).where(
+                    Conversation.id == conversation_id,
+                    true() if user.is_superuser else Conversation.user_id == user.id,
                 )
             )
-            if owned is None:
+            owner_id = owned.user_id if owned else None
+            if owner_id is None and user.is_superuser:
+                # Conversation deletion retains task logs for administrator diagnosis.
+                owner_id = await session.scalar(
+                    select(Task.owner_id)
+                    .where(Task.conversation_id == conversation_id)
+                    .limit(1)
+                )
+            if owner_id is None:
                 raise HTTPException(404, "Conversation not found")
             query = select(Task).where(
-                Task.conversation_id == conversation_id, Task.owner_id == user.id
+                Task.conversation_id == conversation_id, Task.owner_id == owner_id
             )
             if root_id:
                 query = query.where(Task.root_id == root_id)
@@ -275,7 +287,7 @@ class Observation:
                         .join(TaskWait, TaskWait.dependency_id == Task.id)
                         .where(
                             TaskWait.waiter_id == task.id,
-                            Task.owner_id == user.id,
+                            Task.owner_id == task.owner_id,
                             Task.status.in_(ACTIVE),
                         )
                     )
@@ -285,7 +297,8 @@ class Observation:
                 (
                     await session.scalars(
                         select(Artifact).where(
-                            Artifact.task_id == task.id, Artifact.owner_id == user.id
+                            Artifact.task_id == task.id,
+                            Artifact.owner_id == task.owner_id,
                         )
                     )
                 ).all()

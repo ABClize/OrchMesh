@@ -142,6 +142,9 @@ def create_app(settings: Settings | None = None, containers=None) -> FastAPI:
     from .platform.observation import router as observation_router
 
     app.include_router(observation_router(auth, manager))
+    from .admin import router as admin_router
+
+    app.include_router(admin_router(auth, db, manager))
     manager.protocol = Protocol(manager, auth, app)
 
     @app.middleware("http")

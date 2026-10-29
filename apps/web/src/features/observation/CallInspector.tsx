@@ -86,7 +86,11 @@ export function CallInspector({
           )}
           {task.error && (
             <Alert variant="destructive">
-              <AlertDescription>{task.error}</AlertDescription>
+              <AlertDescription>
+                {task.error.startsWith("DSH execution failed")
+                  ? "本次执行未能完成。执行记录已保留，可在下方查看原因。"
+                  : task.error}
+              </AlertDescription>
             </Alert>
           )}
           {task.parent_id && (
@@ -178,6 +182,12 @@ export function CallInspector({
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer">技术信息</summary>
             <dl className="mt-2 flex flex-col gap-1 break-all">
+              {task.error && (
+                <>
+                  <dt>原始错误</dt>
+                  <dd className="whitespace-pre-wrap">{task.error}</dd>
+                </>
+              )}
               <dt>调用 ID</dt>
               <dd>{task.id}</dd>
               <dt>使用的智能体版本</dt>

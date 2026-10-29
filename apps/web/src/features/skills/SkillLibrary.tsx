@@ -1,3 +1,4 @@
+import { AdminAgentEditor } from "@/features/admin/AdminAgentEditor";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/features/auth/useAuth";
@@ -19,44 +20,14 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { BookOpen, ArrowLeft, RefreshCw } from "lucide-react";
-export type Skill = {
-  id: string;
-  name: string;
-  description: string;
-  source: string;
-  revision: string;
-  enabled: boolean;
-};
-type Detail = Skill & {
-  files: Record<string, string>;
-  used_by: string[];
-  definition: {
-    content: string;
-    warnings: string[];
-    invocation: { modelInvocable: boolean; userInvocable: boolean };
-  };
-};
-export function useSkills() {
-  return useQuery({
-    queryKey: ["skills"],
-    queryFn: ({ signal }) =>
-      platformRequest<Skill[]>("/skills", "GET", undefined, signal),
-  });
-}
-function decode(value: string) {
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(
-      Uint8Array.from(atob(value), (c) => c.charCodeAt(0)),
-    );
-  } catch {
-    return null;
-  }
-}
+import { decode, useSkills, type Detail } from "./catalog";
+export { useSkills } from "./catalog";
 export function SkillLibrary() {
   const { me } = useAuth();
   const admin = !!me.data?.is_superuser;
   const query = useQueryClient();
   const list = useSkills();
+  const [editing, setEditing] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -82,6 +53,19 @@ export function SkillLibrary() {
       setBusy(false);
     }
   }
+  if (editing)
+    return (
+      <section className="h-full overflow-y-auto p-6">
+        <AdminAgentEditor
+          id={editing}
+          onClose={() => {
+            setEditing(null);
+            void detail.refetch();
+          }}
+          backLabel="返回 Skill"
+        />
+      </section>
+    );
   return (
     <section className="h-full overflow-y-auto p-6">
       <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -136,6 +120,7 @@ export function SkillLibrary() {
                   admin={admin}
                   busy={busy}
                   action={action}
+                  onEditAgent={setEditing}
                 />
               )
             )}
@@ -272,11 +257,13 @@ export function SkillLibrary() {
 }
 function SkillDetail({
   item,
+  onEditAgent,
   admin,
   busy,
   action,
 }: {
   item: Detail;
+  onEditAgent: (id: string) => void;
   admin: boolean;
   busy: boolean;
   action: (work: () => Promise<unknown>) => Promise<void>;
@@ -297,7 +284,16 @@ function SkillDetail({
             : "已停用 · 不能添加到智能体"}
         </p>
         <p className="text-sm">
-          使用此 Skill 的草稿：{item.used_by.join("、") || "还没有"}
+          使用此 Skill 的草稿：{!item.used_by.length && "还没有"}
+          {item.used_by.map((agent) => (
+            <Button
+              key={agent.id}
+              variant="link"
+              onClick={() => onEditAgent(agent.id)}
+            >
+              {agent.name} · {agent.id.slice(0, 8)}
+            </Button>
+          ))}
         </p>
         {!admin && (
           <div className="whitespace-pre-wrap text-sm leading-relaxed">

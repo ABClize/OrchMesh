@@ -294,3 +294,20 @@ async def test_recovery_waits_for_admitted_children_even_before_wait_edge(
     restored = await app.state.manager.protocol.recover_dependencies(root)
     assert seen == ["admitted", "shared"]
     assert len(restored) == 2
+
+
+async def test_delegation_exposes_only_separate_start_wait_and_result():
+    from unittest.mock import Mock
+
+    import pytest
+
+    from orchmesh.platform.tools import definitions, invoke
+
+    names = {tool["name"] for tool in definitions(True, True)}
+    assert "delegate_task" not in names
+    assert {"start_agent_task", "wait_for_tasks", "get_task_result"} <= names
+    # Reject removed names before consulting receipts or opening a workflow.
+    engine = Mock()
+    with pytest.raises(ValueError, match="Unknown platform tool"):
+        await invoke(engine, Mock(), "delegate_task", {}, "old-call")
+    engine.db.sessions.assert_not_called()

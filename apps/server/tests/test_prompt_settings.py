@@ -93,7 +93,7 @@ async def test_prompt_admission_snapshot_and_builder(app):
             ).platform_prompt == DEFAULTS.platform
 
 
-async def test_effective_prompt_requires_admin_and_task_owner(app):
+async def test_effective_prompt_requires_admin(app):
     import json
     import uuid
 
@@ -129,4 +129,4 @@ async def test_effective_prompt_requires_admin_and_task_owner(app):
         other_id = uuid.UUID((await other.get("/api/me")).json()["id"])
         async with app.state.db.sessions.begin() as session:
             (await session.get(User, other_id)).is_superuser = True
-        assert (await other.get(url)).status_code == 404
+        assert (await other.get(url)).json()["snapshot"] == snapshot

@@ -34,6 +34,7 @@ export function useCatalogAction() {
         predicate: (q) =>
           [
             "agents",
+            "admin",
             "memory",
             "memory-settings",
             "knowledge",

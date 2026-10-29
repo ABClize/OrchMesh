@@ -100,7 +100,7 @@ A2A Handler 必须在短事务中持久受理，执行交给 DBOS，不能让原
 
 `list_agent_tasks` 查询同用户、同根任务状态；`get_task_result(task_id)` 是显式非阻塞读取，未完成时只返回状态，终态时经官方 A2A Get Task 获取最终 assistant 文本。A2A 成果投影不再序列化完整 task.messages；完整历史保留于 DSH 日志。恢复续跑消息不注入协作者历史、摘要或结果，主 Agent 自行查询与读取。
 
-恢复与 request_execution 换执行环境只恢复显式等待边，不将已发起的子任务自动解释为阻塞。若主 Agent 提前结束而仍有活动子任务，原有完成保护会先持久登记这些依赖并等待后继续，避免遗弃子任务。旧 `delegate_task` 保留为 start + wait 的阻塞兼容包装。未引入新的调度器、代理循环或恢复队列。
+恢复与 request_execution 换执行环境只恢复显式等待边，不将已发起的子任务自动解释为阻塞。若主 Agent 提前结束而仍有活动子任务，原有完成保护会先持久登记这些依赖并等待后继续，避免遗弃子任务。委派统一通过 start_agent_task、wait_for_tasks、get_task_result 完成，不提供阻塞式委派兼容工具。未引入新的调度器、代理循环或恢复队列。
 
 ## 6. 重启恢复协议：首版必做
 

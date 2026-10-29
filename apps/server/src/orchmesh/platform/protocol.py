@@ -338,11 +338,6 @@ class Protocol:
             return state
         return await self.result(identifier, parent.owner_id)
 
-    async def delegate(self, parent, arguments):
-        accepted = await self.start(parent, arguments)
-        await self.attach_wait(parent, accepted["task_id"])
-        return await self.wait_result(accepted["task_id"], parent.owner_id)
-
     async def start(self, parent, arguments):
         import json
 
@@ -414,10 +409,6 @@ class Protocol:
             if not child or child.owner_id != owner:
                 raise ValueError("Delegation ownership mismatch")
         return {"task_id": child.id, "status": child.status}
-
-    async def wait_result(self, task_id, owner):
-        await self.wait_status(task_id, owner)
-        return await self.result(task_id, owner)
 
     async def result(self, task_id, owner):
         async with self.engine.db.sessions() as session:

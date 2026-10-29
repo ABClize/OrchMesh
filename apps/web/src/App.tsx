@@ -1,7 +1,7 @@
+import { initializeTheme } from "@/features/workspace/ThemeToggle";
 import { SkillLibrary } from "@/features/skills/SkillLibrary";
-import { PromptSettings } from "@/features/settings/PromptSettings";
-import { ModelSettings } from "@/features/models/ModelSettings";
-import { ThemeToggle } from "@/features/workspace/ThemeToggle";
+import { AdminPanel } from "@/features/admin/AdminPanel";
+import { PersonalSettings } from "@/features/settings/PersonalSettings";
 import { ContextLibrary } from "@/features/platform/ContextLibrary";
 import { Library } from "@/features/platform/Library";
 import { platformRequest } from "@/lib/platform";
@@ -63,19 +63,23 @@ const DraftChat = lazy(() =>
 import { useAuth, resetAuthCache } from "@/features/auth/useAuth";
 import { useChat } from "@/features/chat/store";
 
+initializeTheme();
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
 });
 
 function Workspace() {
   const query = useQueryClient();
+  const [accountOpen, setAccountOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState<
-    "chat" | "agents" | "context" | "models" | "prompts" | "skills"
+    "chat" | "agents" | "context" | "settings" | "admin" | "skills"
   >("chat");
   function navigate(
-    value: "chat" | "agents" | "context" | "models" | "prompts" | "skills",
+    value: "chat" | "agents" | "context" | "settings" | "admin" | "skills",
   ) {
+    setAccountOpen(false);
     setPage(value);
     setShowConversations(false);
     useFiles.getState().close();
@@ -239,6 +243,7 @@ function Workspace() {
     >
       <SidebarLayout
         showConversations={showConversations}
+        hideSidebar={page === "admin"}
         sidebar={
           <aside id="conversations" className="workspace-sidebar">
             <div className="sidebar-brand">
@@ -246,7 +251,7 @@ function Workspace() {
                 <Layers aria-hidden="true" />
               </span>
               <span>OrchMesh</span>
-              <ThemeToggle />
+
               <Button
                 variant="ghost"
                 size="icon"
@@ -303,26 +308,6 @@ function Workspace() {
                 <BookOpen />
                 知识与记忆
               </Button>
-              {me.data?.is_superuser && (
-                <Button
-                  variant={page === "models" ? "secondary" : "ghost"}
-                  className="justify-start"
-                  onClick={() => navigate("models")}
-                >
-                  <Settings2 />
-                  模型设置
-                </Button>
-              )}
-              {me.data?.is_superuser && (
-                <Button
-                  variant={page === "prompts" ? "secondary" : "ghost"}
-                  className="justify-start"
-                  onClick={() => navigate("prompts")}
-                >
-                  <Settings2 />
-                  提示词设置
-                </Button>
-              )}
             </nav>
             <Navigation
               archived={showArchived}
@@ -354,7 +339,7 @@ function Workspace() {
                 }
               }}
             />
-            <Popover>
+            <Popover open={accountOpen} onOpenChange={setAccountOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
@@ -365,9 +350,9 @@ function Workspace() {
                     <UserRound />
                   </span>
                   <span className="flex flex-1 flex-col items-start gap-0.5">
-                    <span>我的工作空间</span>
+                    <span>{me.data.email.split("@")[0]}</span>
                     <span className="text-xs text-muted-foreground">
-                      个人账户
+                      {me.data.is_superuser ? "管理员" : "个人账户"}
                     </span>
                   </span>
                   <ChevronsUpDown />
@@ -379,9 +364,25 @@ function Workspace() {
                 className="account-popover"
               >
                 <ProfileMenu
-                  name="我的工作空间"
+                  name={me.data.email.split("@")[0]}
                   email={me.data.email}
                   items={[
+                    {
+                      id: "settings",
+                      label: "设置",
+                      icon: <Settings2 />,
+                      onSelect: () => navigate("settings"),
+                    },
+                    ...(me.data.is_superuser
+                      ? [
+                          {
+                            id: "admin",
+                            label: "管理后台",
+                            icon: <Settings2 />,
+                            onSelect: () => navigate("admin"),
+                          },
+                        ]
+                      : []),
                     {
                       id: "logout",
                       label: "退出登录",
@@ -398,6 +399,16 @@ function Workspace() {
         <Workbench conversationId={id}>
           <main className="workspace-main">
             <header className="chat-header">
+              {page === "admin" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate("chat")}
+                >
+                  <PanelLeft />
+                  返回工作空间
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -412,10 +423,10 @@ function Workspace() {
               <span className="min-w-0 flex-1 truncate">
                 {page === "skills"
                   ? "Skill 库"
-                  : page === "prompts"
-                    ? "提示词设置"
-                    : page === "models"
-                      ? "模型设置"
+                  : page === "admin"
+                    ? "管理后台"
+                    : page === "settings"
+                      ? "设置"
                       : page === "agents"
                         ? "智能体库"
                         : page === "context"
@@ -469,8 +480,8 @@ function Workspace() {
             )}
             {page === "skills" && <SkillLibrary />}
             {page === "context" && <ContextLibrary />}
-            {page === "models" && me.data?.is_superuser && <ModelSettings />}
-            {page === "prompts" && me.data?.is_superuser && <PromptSettings />}
+            {page === "settings" && <PersonalSettings />}
+            {page === "admin" && me.data?.is_superuser && <AdminPanel />}
             <div
               hidden={page !== "chat"}
               className="chat-page min-h-0 flex-1 flex-col"

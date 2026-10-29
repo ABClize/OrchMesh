@@ -116,6 +116,35 @@ def router(auth, db):
                 result.append(value)
             return result
 
+    @api.get("/agents/{agent_id}")
+    async def detail(
+        agent_id: str, user: Annotated[User, Depends(auth.current_user)]
+    ) -> dict:
+        async with db.sessions() as session:
+            return export(await editable(session, agent_id, user))
+
+    @api.get("/agents/{agent_id}/knowledge")
+    async def agent_knowledge(
+        agent_id: str, user: Annotated[User, Depends(auth.current_user)]
+    ) -> list[dict]:
+        async with db.sessions() as session:
+            agent = await editable(session, agent_id, user)
+            items = (
+                await session.scalars(
+                    select(Knowledge).where(Knowledge.owner_id == agent.owner_id)
+                )
+            ).all()
+            return [
+                {
+                    "id": item.id,
+                    "title": item.title,
+                    "content": item.content,
+                    "enabled": True,
+                    "agent_id": item.agent_id,
+                }
+                for item in items
+            ]
+
     @api.post("/agents", status_code=201)
     async def create(
         body: Definition, user: Annotated[User, Depends(auth.current_user)]
@@ -150,6 +179,10 @@ def router(auth, db):
                 await freeze_skills(session, [b.model_dump() for b in body.skills])
             except ValueError as e:
                 raise HTTPException(422, str(e)) from None
+            for identifier in body.knowledge_ids:
+                item = await session.get(Knowledge, identifier)
+                if not item or item.owner_id != agent.owner_id:
+                    raise HTTPException(422, "只能添加此智能体所属用户的知识。")
             agent.name, agent.description, agent.draft = (
                 body.name,
                 body.description,

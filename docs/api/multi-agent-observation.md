@@ -13,7 +13,7 @@
 
 ## 认证
 
-所有请求使用 `Authorization: Bearer <access_token>`。只允许任务所属账号查看；管理员也不通过这些接口越权查看其他账号。不存在和无权限均返回 404。SSE 在响应头发送前校验归属和游标，并在连接中持续校验令牌。
+所有请求使用 `Authorization: Bearer <access_token>`。普通用户只允许查看自己所属任务；管理员可通过管理后台跨用户只读查看任务、调用图、历史与实际提示词。此权限不授予停止任务、回答问题或访问其他用户文件的能力。管理员也可以查看已删除对话留下的任务链路。不存在和无权限均返回 404。SSE 在响应头发送前校验归属和游标，并在连接中持续校验令牌。
 
 浏览器用支持自定义 headers 的 fetch SSE 客户端；不要把令牌放 URL。原生 EventSource 不能设置本项目需要的 Authorization header。
 
@@ -117,7 +117,7 @@ activity：存在待答问题为 `waiting_user`，存在等待依赖为 `waiting
     "seq": 12,
     "time": 1793050000000,
     "type": "tool/call",
-    "data": {"turn": 1, "step": 2, "callId": "call-1", "name": "delegate_task", "arguments": "{}"}
+    "data": {"turn": 1, "step": 2, "callId": "call-1", "name": "start_agent_task", "arguments": "{}"}
   }],
   "next_after": 15,
   "has_more": true,
@@ -189,13 +189,13 @@ data: {"after":15}
 
 start_agent_task 返回即产生真实调用树节点和聚合关系；父级继续工作时不显示等待协作者。wait_for_tasks 建立显式依赖后，活动依赖才进入 waiting_dependency 观测；历史终态等待边不影响当前状态。节点和事件 API 不变。
 
-瀑布图分别保留 start_agent_task 的短受理跨度、父级独立工具跨度及 wait_for_tasks 的收集跨度。两种工具的结果详情可按 task_id 跳转各协作调用；批量结果展示每个目标入口，复用现有详情、树祖先展开和订阅生命周期。旧 delegate_task 结果入口兼容。当前瀑布图仍是所选调用的真实日志，不将子任务事件混入父级工具时间轴。
+瀑布图分别保留 start_agent_task 的短受理跨度、父级独立工具跨度及 wait_for_tasks 的收集跨度。两种工具的结果详情可按 task_id 跳转各协作调用；批量结果展示每个目标入口，复用现有详情、树祖先展开和订阅生命周期。当前瀑布图仍是所选调用的真实日志，不将子任务事件混入父级工具时间轴。
 
 ### 状态与结果分离（2026-10-27）
 
 wait_for_tasks 支持 mode=any/all（默认all），仅返回 `{mode,tasks:[{task_id,agent_id,name,status}]}`。any返回时可同时包含终态和运行中任务；它不是“下一个未读事件”，传入已终态任务会立即满足条件。list_agent_tasks返回同样的状态条目，不附带任务正文、历史、摘要或成果。
 
-get_task_result 是唯一的新显式成果读取工具：未完成返回身份状态，终态返回最终输出；不阻塞，不回传完整历史。旧delegate_task作为已有会话的显式阻塞接口保留。没有自动消息注入或主Agent主动通知唤醒功能，状态通过查询/等待工具获知。
+get_task_result 是唯一的新显式成果读取工具：未完成返回身份状态，终态返回最终输出；不阻塞，不回传完整历史。不提供阻塞式委派工具。没有自动消息注入或主Agent主动通知唤醒功能，状态通过查询/等待工具获知。
 
 瀑布图详情标识“等待任意一个完成”“等待全部完成”“按需读取最终结果”，各状态和结果工具的任务引用均可跳转原调用详情。等待结束清理活动依赖，不让any中未完成的其他任务继续把主Agent标为等待；完整审计仍由官方tool/call、tool/result日志保留。
 

@@ -47,7 +47,7 @@ async def test_start_reuses_admitted_work_without_wait_or_recovery_barrier(
     parent, _ = await seed(app)
     protocol = app.state.manager.protocol
     wait = AsyncMock(side_effect=AssertionError("start must not wait"))
-    monkeypatch.setattr(protocol, "wait_result", wait)
+    monkeypatch.setattr(protocol, "wait_status", wait)
     first = await protocol.start(
         parent, {"agent_id": "agent", "task": "work", "work_key": "a"}
     )

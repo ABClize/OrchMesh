@@ -26,16 +26,19 @@ export function SidebarLayout({
   sidebar,
   children,
   showConversations,
+  hideSidebar = false,
 }: {
   sidebar: ReactNode;
   children: ReactNode;
   showConversations: boolean;
+  hideSidebar?: boolean;
 }) {
   const size = useSyncExternalStore(subscribe, getSize, () => "wide");
   const open = useFiles((state) => state.open);
   const visible =
-    size === "wide" ||
-    (size === "desktop" ? !open || showConversations : showConversations);
+    !hideSidebar &&
+    (size === "wide" ||
+      (size === "desktop" ? !open || showConversations : showConversations));
   return (
     <div className="flex h-full min-w-0 flex-1">
       {size === "mobile" && visible && sidebar}
